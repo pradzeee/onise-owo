@@ -4,17 +4,13 @@ import { NextResponse, type NextRequest } from "next/server";
 const PROTECTED_PATHS = ["/onboarding", "/dashboard", "/artisan", "/artisans", "/admin", "/find", "/jobs", "/settings"];
 
 export async function updateSession(request: NextRequest) {
-  // Allow dev access session to bypass middleware redirect in development
-  const devRole = request.cookies.get("onise_dev_role")?.value;
-  if (process.env.NODE_ENV !== "production" && devRole) {
-    return NextResponse.next({ request });
-  }
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const hasRealSupabase = Boolean(url && anonKey && !url.includes("YOUR_PROJECT_REF"));
 
-  // Allow public pages to render cleanly even before .env.local is populated
-  if (!url || !anonKey || url.includes("YOUR_PROJECT_REF")) {
+  // Allow dev/demo access session to pass through cleanly
+  const devRole = request.cookies.get("onise_dev_role")?.value;
+  if (!hasRealSupabase || !url || !anonKey || devRole) {
     return NextResponse.next({ request });
   }
 

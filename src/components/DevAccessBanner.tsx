@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, ChevronUp, Shield, Wrench, User, LogOut, ExternalLink } from "lucide-react";
+import { ChevronDown, ChevronUp, Shield, Wrench, User, LogOut } from "lucide-react";
 import type { DevRole } from "@/lib/dev-access";
 
 export function DevAccessBanner() {
@@ -134,30 +135,30 @@ export function DevAccessBanner() {
 
               {/* Quick links to high-interest screens */}
               <div className="hidden items-center gap-1 border-l border-amber-600/40 pl-2 lg:flex">
-                <a
+                <Link
                   href="/find"
                   className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-gray-950 underline hover:bg-white/40"
                 >
                   Map
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/jobs"
                   className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-gray-950 underline hover:bg-white/40"
                 >
                   Jobs
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/admin"
                   className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-gray-950 underline hover:bg-white/40"
                 >
                   Admin
-                </a>
-                <a
+                </Link>
+                <Link
                   href="/settings"
                   className="rounded px-1.5 py-0.5 text-[11px] font-semibold text-gray-950 underline hover:bg-white/40"
                 >
                   Settings
-                </a>
+                </Link>
               </div>
             </div>
           ) : null}

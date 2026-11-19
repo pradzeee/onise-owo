@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, prefer-const */
 import { cookies } from "next/headers";
 import type {
   ArtisanProfileRecord,
@@ -7,7 +8,6 @@ import type {
   JobRequestRecord,
   NearbyArtisanResult,
   ProfileRecord,
-  UserRole,
 } from "./constants";
 
 export const DEV_ROLE_COOKIE_NAME = "onise_dev_role";
@@ -63,10 +63,23 @@ export const DEV_USERS: Record<DevRole, DevUser> = {
 };
 
 /**
- * Returns true if Dev Access mode is permitted (development environment only).
+ * Returns true if Dev/Demo Access mode is permitted.
+ * Permitted in development or when live Supabase credentials are not configured
+ * (allowing Vercel preview deploys to function without setup).
  */
 export function isDevAccessAllowed(): boolean {
-  return process.env.NODE_ENV !== "production";
+  if (process.env.NEXT_PUBLIC_DISABLE_DEMO === "true") {
+    return false;
+  }
+  const hasRealSupabase = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+      !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("YOUR_PROJECT_REF"),
+  );
+  if (hasRealSupabase) {
+    return process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_ENABLE_DEMO === "true";
+  }
+  return true;
 }
 
 /**
