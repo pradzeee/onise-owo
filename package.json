@@ -1,0 +1,50 @@
+{
+  "name": "onise-owo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:rls": "tsx tests/rls-step1.live.ts",
+    "test:rls:step2": "tsx tests/rls-step2.live.ts",
+    "test:rls:step3": "tsx tests/rls-step3.live.ts",
+    "test:rls:step4": "tsx tests/rls-step4.live.ts",
+    "test:rls:step5": "tsx tests/rls-step5.live.ts",
+    "test:rls:step6": "tsx tests/rls-step6.live.ts",
+    "test:rls:step7": "tsx tests/rls-step7.live.ts",
+    "test:rls:step8": "tsx tests/rls-step8.live.ts",
+    "test:rls:step9": "tsx tests/rls-step9.live.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.49.1",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.475.0",
+    "next": "^15.2.4",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "sharp": "^0.35.5",
+    "web-push": "^4.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.14",
+    "@types/leaflet": "^1.9.22",
+    "@types/node": "^22.13.10",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9.22.0",
+    "eslint-config-next": "^15.2.4",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.0.14",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

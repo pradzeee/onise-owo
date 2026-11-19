@@ -1,0 +1,20 @@
+{
+  "name": "Oníṣẹ́ ọwọ́ — Verified Artisans in Nigeria",
+  "short_name": "Oníṣẹ́ ọwọ́",
+  "description": "Connect with nearby verified plumbers, electricians, tailors, carpenters, mechanics, painters, and makeup artists across Nigeria.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#FAFAF8",
+  "theme_color": "#0B6E4F",
+  "lang": "en-NG",
+  "categories": ["lifestyle", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

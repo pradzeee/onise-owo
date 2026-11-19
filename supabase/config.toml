@@ -1,0 +1,38 @@
+# Supabase local development configuration for Oníṣẹ́ ọwọ́
+project_id = "onise-owo"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000"]
+jwt_expiry = 3600
+enable_signup = true
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = true
+max_frequency = "60s"
+otp_length = 6
+otp_expiry = 300
+
+# In production / staging, point Supabase Auth Send SMS Hook to:
+# https://<project-ref>.functions.supabase.co/send-sms-hook
+# [auth.hook.send_sms]
+# enabled = true
+# uri = "pg-functions://postgres/public/..." or Edge Function HTTPS URL
+# secrets = "env(SEND_SMS_HOOK_SECRET)"
