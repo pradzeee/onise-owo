@@ -2,6 +2,10 @@
 
 Mobile-first installable PWA connecting customers across Nigeria with nearby verified artisans (plumbers, electricians, tailors, carpenters, mechanics, painters, and makeup artists).
 
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fpradzeee%2Fonise-owo)
+
+> 🌐 **Live Web Preview**: Deploy directly from your GitHub repository to [Vercel](https://vercel.com/new) in 1 click for a free live URL (e.g. `https://onise-owo.vercel.app`).
+
 ## Stack
 - **Frontend & Server:** Next.js (App Router) + Tailwind CSS + PWA (`manifest.webmanifest`, `sw.js`)
 - **Database, Auth, Storage, Realtime:** Supabase (Postgres + PostGIS, Phone OTP + Send SMS Hook for Termii / Africa's Talking, private & public Storage buckets, Realtime chat)
