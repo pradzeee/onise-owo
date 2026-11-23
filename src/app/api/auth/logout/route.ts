@@ -29,5 +29,11 @@ export async function POST() {
 
   const res = NextResponse.json({ ok: true });
   res.cookies.delete(ADMIN_MFA_COOKIE_NAME);
+  res.cookies.delete("onise_dev_role");
+  res.cookies.delete("onise_user_email");
+  res.cookies.delete("onise_user_role");
+  res.cookies.delete("onise_user_name");
+  res.cookies.delete("onise_user_phone");
+  res.cookies.delete("onise_session");
   return res;
 }

@@ -12,7 +12,7 @@ interface LoginFormProps {
   supabaseConfigured: boolean;
 }
 
-export function LoginForm({ supabaseConfigured: _supabaseConfigured }: LoginFormProps) {
+export function LoginForm({ supabaseConfigured }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -27,7 +27,7 @@ export function LoginForm({ supabaseConfigured: _supabaseConfigured }: LoginForm
     setGoogleLoading(true);
 
     try {
-      if (isSupabaseConfigured()) {
+      if (supabaseConfigured && isSupabaseConfigured()) {
         const supabase = createSupabaseBrowserClient();
         const origin = window.location.origin;
         const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -43,17 +43,30 @@ export function LoginForm({ supabaseConfigured: _supabaseConfigured }: LoginForm
           return;
         }
       } else {
-        // Preview / demo mode: sign in as Google tester
+        // Preview mode: sign in as the user's Google account
+        let targetEmail = email.trim();
+        if (!targetEmail) {
+          const input = window.prompt("Enter your Gmail address to login with Google:");
+          if (!input || !input.trim()) {
+            setGoogleLoading(false);
+            return;
+          }
+          targetEmail = input.trim();
+        }
+
         const res = await fetch("/api/auth/email-login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email: "google.tester@gmail.com" }),
+          body: JSON.stringify({ email: targetEmail }),
         });
-        const data = (await res.json()) as { ok?: boolean; nextPath?: string };
+        const data = (await res.json()) as { ok?: boolean; error?: string; nextPath?: string };
         if (data.ok) {
           router.push(data.nextPath ?? "/onboarding");
           router.refresh();
           return;
+        }
+        if (data.error) {
+          setError(data.error);
         }
       }
     } catch {
@@ -136,7 +149,7 @@ export function LoginForm({ supabaseConfigured: _supabaseConfigured }: LoginForm
             d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
           />
         </svg>
-        {googleLoading ? "Connecting to Google..." : "Continue with Google"}
+        {googleLoading ? "Connecting to Google..." : "Login with Google"}
       </button>
 
       {/* 2. Visual Divider */}

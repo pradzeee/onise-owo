@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { LEGAL_VERSIONS } from "@/lib/constants";
@@ -78,6 +79,12 @@ export async function POST(request: NextRequest) {
     logger.info("onboarding.completed", {
       userId: user.id,
       role: parsed.data.role,
+    });
+
+    const cookieStore = await cookies();
+    cookieStore.set("onise_user_role", parsed.data.role, {
+      path: "/",
+      sameSite: "lax",
     });
 
     return NextResponse.json({

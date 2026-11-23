@@ -5,7 +5,6 @@ import {
   createMockSupabaseServerClient,
   getActiveDevUser,
   isDevAccessAllowed,
-  DEV_USERS,
 } from "../dev-access";
 
 export function isRealSupabaseConfigured(): boolean {
@@ -30,7 +29,7 @@ export async function createSupabaseServerClient(): Promise<any> {
   // If in development mode and real Supabase is not configured, return the dev mock client.
   if (isDevAccessAllowed() && !isReal) {
     const devUser = await getActiveDevUser();
-    return createMockSupabaseServerClient(devUser ?? DEV_USERS.admin);
+    return createMockSupabaseServerClient(devUser);
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -39,7 +38,7 @@ export async function createSupabaseServerClient(): Promise<any> {
   if (!url || !anonKey) {
     if (isDevAccessAllowed()) {
       const devUser = await getActiveDevUser();
-      return createMockSupabaseServerClient(devUser ?? DEV_USERS.admin);
+      return createMockSupabaseServerClient(devUser);
     }
     throw new Error(
       "Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY environment variables.",

@@ -83,15 +83,15 @@ export function isDevAccessAllowed(): boolean {
 }
 
 /**
- * Reads the active dev role from cookie.
+ * Reads the active user role from cookie.
  */
 export async function getDevRole(): Promise<DevRole | null> {
   if (!isDevAccessAllowed()) return null;
   try {
     const cookieStore = await cookies();
-    const val = cookieStore.get(DEV_ROLE_COOKIE_NAME)?.value as DevRole | undefined;
-    if (val && val in DEV_USERS) {
-      return val;
+    const role = cookieStore.get("onise_user_role")?.value as DevRole | undefined;
+    if (role === "admin" || role === "artisan" || role === "customer") {
+      return role;
     }
   } catch {
     // cookies() unavailable
@@ -100,11 +100,33 @@ export async function getDevRole(): Promise<DevRole | null> {
 }
 
 /**
- * Returns the currently active dev user, or null if guest / none selected.
+ * Returns the currently active authenticated user, or null if guest.
+ * Prevents any automatic login into mock or pre-baked accounts.
  */
 export async function getActiveDevUser(): Promise<DevUser | null> {
-  const role = await getDevRole();
-  return role ? DEV_USERS[role] : null;
+  try {
+    const cookieStore = await cookies();
+    const userEmail = cookieStore.get("onise_user_email")?.value;
+    if (!userEmail) return null;
+
+    const userRole = (cookieStore.get("onise_user_role")?.value as DevRole) || null;
+    const userName = cookieStore.get("onise_user_name")?.value || userEmail.split("@")[0];
+    const userPhone = cookieStore.get("onise_user_phone")?.value || "";
+
+    return {
+      id: `u-${Buffer.from(userEmail).toString("hex").slice(0, 12)}`,
+      email: userEmail,
+      phone: userPhone,
+      role: userRole || ("customer" as DevRole),
+      display_name: userName,
+      account_status: "active",
+      verification_status: "approved",
+      rating_avg: 5.0,
+      rating_count: 0,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -540,15 +562,46 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
       if (fn === "expire_stale_online_artisans") {
         return Promise.resolve({ data: 0, error: null });
       }
+      if (fn === "complete_onboarding") {
+        const role = String(args.p_role ?? "customer");
+        if (currentUser) {
+          (currentUser.user_metadata as any).role = role;
+        }
+        return Promise.resolve({
+          data: {
+            id: currentUser?.id,
+            role,
+            display_name: currentUser?.email?.split("@")[0] || "User",
+            account_status: "active",
+            verification_status: "approved",
+          },
+          error: null,
+        });
+      }
       return Promise.resolve({ data: null, error: null });
     },
     from(tableName: string) {
       let data: any[] = [];
 
       switch (tableName) {
-        case "profiles":
+        case "profiles": {
           data = [...MOCK_PROFILES];
+          if (currentUser && !data.some((p) => p.id === currentUser.id)) {
+            data.push({
+              id: currentUser.id,
+              role: (currentUser.user_metadata as any)?.role || devUser?.role || null,
+              display_name: currentUser.email?.split("@")[0] || "User",
+              phone: currentUser.phone || null,
+              account_status: "active",
+              verification_status: "approved",
+              rating_avg: 5.0,
+              rating_count: 0,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
           break;
+        }
         case "artisan_profiles":
           data = [...MOCK_ARTISAN_PROFILES];
           break;

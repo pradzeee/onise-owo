@@ -63,20 +63,21 @@ export async function POST(request: NextRequest) {
     if (isDevAccessAllowed()) {
       const cookieStore = await cookies();
 
-      // Check if user has an existing role; default new testers to customer
-      const existingRole = cookieStore.get(DEV_ROLE_COOKIE_NAME)?.value;
-      const targetRole = existingRole || "customer";
+      // Clear any legacy dev role cookies
+      cookieStore.delete(DEV_ROLE_COOKIE_NAME);
 
-      cookieStore.set(DEV_ROLE_COOKIE_NAME, targetRole, {
-        path: "/",
-        sameSite: "lax",
-      });
-
-      // Save the tester's email in a session cookie so it appears in profile
+      // Save user email & username
       cookieStore.set("onise_user_email", email, {
         path: "/",
         sameSite: "lax",
       });
+
+      cookieStore.set("onise_user_name", email.split("@")[0], {
+        path: "/",
+        sameSite: "lax",
+      });
+
+      const existingRole = cookieStore.get("onise_user_role")?.value;
 
       return NextResponse.json({
         ok: true,

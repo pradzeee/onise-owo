@@ -29,7 +29,7 @@ export default function HomePage() {
               href="/login"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-base font-bold text-gray-950 transition hover:bg-amber-300"
             >
-              Get started with your phone
+              Get started with Google
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
             <Link
@@ -63,9 +63,9 @@ export default function HomePage() {
         <section className="mt-8 grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-gray-200 bg-white p-4">
             <CheckCircle2 className="h-5 w-5 text-[#0B6E4F]" aria-hidden="true" />
-            <h3 className="mt-2 text-sm font-bold text-gray-900">Phone + OTP sign-in</h3>
+            <h3 className="mt-2 text-sm font-bold text-gray-900">Google &amp; Gmail sign-in</h3>
             <p className="mt-1 text-xs leading-relaxed text-gray-600">
-              No passwords to forget. Protected by rate limits and CAPTCHA.
+              Instant login with your Google account. Link your Nigerian phone in profile anytime.
             </p>
           </div>
           <div className="rounded-2xl border border-gray-200 bg-white p-4">

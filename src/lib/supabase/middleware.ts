@@ -8,9 +8,20 @@ export async function updateSession(request: NextRequest) {
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const hasRealSupabase = Boolean(url && anonKey && !url.includes("YOUR_PROJECT_REF"));
 
-  // Allow dev/demo access session to pass through cleanly
-  const devRole = request.cookies.get("onise_dev_role")?.value;
-  if (!hasRealSupabase || !url || !anonKey || devRole) {
+  const pathname = request.nextUrl.pathname;
+  const isProtected = PROTECTED_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+
+  // If live Supabase credentials are not configured, verify session via user email
+  if (!hasRealSupabase || !url || !anonKey) {
+    const userEmail = request.cookies.get("onise_user_email")?.value;
+    if (isProtected && !userEmail) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      redirectUrl.searchParams.set("next", pathname);
+      return NextResponse.redirect(redirectUrl);
+    }
     return NextResponse.next({ request });
   }
 
@@ -34,11 +45,6 @@ export async function updateSession(request: NextRequest) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const pathname = request.nextUrl.pathname;
-  const isProtected = PROTECTED_PATHS.some(
-    (p) => pathname === p || pathname.startsWith(`${p}/`),
-  );
 
   if (isProtected && !user) {
     const redirectUrl = request.nextUrl.clone();
