@@ -44,31 +44,50 @@ export async function POST(request: NextRequest) {
       }
 
       logger.info("auth.password_login_success", { userId: data.user?.id });
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
       return NextResponse.json({
         ok: true,
-        nextPath: "/dashboard",
+        nextPath: profile?.role ? "/dashboard" : "/onboarding",
       });
     }
 
-    // 2. Preview / Demo Mode (Tester sign-in without live Supabase env vars)
+    // 2. Preview / Demo Mode (Tester sign-in with verified registry)
     if (isDevAccessAllowed()) {
       const cookieStore = await cookies();
+      const rawUsers = cookieStore.get("onise_registered_users")?.value;
+      const registeredUsers: Record<string, {
+        email: string;
+        displayName: string;
+        role: "customer" | "artisan";
+        trade?: string;
+      }> = rawUsers ? JSON.parse(rawUsers) : {};
 
-      cookieStore.set("onise_user_email", email, {
-        path: "/",
-        sameSite: "lax",
-      });
+      const account = registeredUsers[email];
+      if (!account) {
+        return NextResponse.json(
+          {
+            error: "No account found with this email. Please click Sign Up to create your account.",
+          },
+          { status: 404 },
+        );
+      }
 
-      cookieStore.set("onise_user_name", email.split("@")[0], {
-        path: "/",
-        sameSite: "lax",
-      });
-
-      const existingRole = cookieStore.get("onise_user_role")?.value;
+      cookieStore.set("onise_user_email", account.email, { path: "/", sameSite: "lax" });
+      cookieStore.set("onise_user_name", account.displayName, { path: "/", sameSite: "lax" });
+      cookieStore.set("onise_user_role", account.role, { path: "/", sameSite: "lax" });
+      if (account.trade) {
+        cookieStore.set("onise_user_trade", account.trade, { path: "/", sameSite: "lax" });
+      }
 
       return NextResponse.json({
         ok: true,
-        nextPath: existingRole ? "/dashboard" : "/onboarding",
+        nextPath: "/dashboard",
       });
     }
 

@@ -3,12 +3,23 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Briefcase, Lock, Mail, User, Wrench } from "lucide-react";
+import {
+  AlertCircle,
+  Briefcase,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  User,
+  Wrench,
+} from "lucide-react";
 import { TRADES } from "@/lib/constants";
 import {
   createSupabaseBrowserClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
+import { GoogleAuthModal } from "./GoogleAuthModal";
 
 interface SignupFormProps {
   supabaseConfigured?: boolean;
@@ -21,18 +32,20 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleGoogleSignUp() {
     if (googleLoading) return;
     setError(null);
-    setGoogleLoading(true);
 
-    try {
-      if (supabaseConfigured && isSupabaseConfigured()) {
+    if (supabaseConfigured && isSupabaseConfigured()) {
+      setGoogleLoading(true);
+      try {
         const supabase = createSupabaseBrowserClient();
         const origin = window.location.origin;
         const { error: oauthError } = await supabase.auth.signInWithOAuth({
@@ -45,47 +58,41 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
         if (oauthError) {
           setError(oauthError.message);
           setGoogleLoading(false);
-          return;
         }
-      } else {
-        // Preview mode: instant Google sign-in
-        let targetEmail = email.trim();
-        if (!targetEmail) {
-          const input = window.prompt("Enter your Gmail address to sign up with Google:");
-          if (!input || !input.trim()) {
-            setGoogleLoading(false);
-            return;
-          }
-          targetEmail = input.trim();
-        }
-
-        const res = await fetch("/api/auth/signup", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: targetEmail,
-            password: "google-oauth-session",
-            displayName: displayName.trim() || targetEmail.split("@")[0],
-            role,
-            trade: role === "artisan" ? trade : undefined,
-            acceptedTerms: true,
-          }),
-        });
-
-        const data = (await res.json()) as { ok?: boolean; error?: string; nextPath?: string };
-        if (data.ok) {
-          router.push(data.nextPath ?? "/dashboard");
-          router.refresh();
-          return;
-        }
-        if (data.error) {
-          setError(data.error);
-        }
+      } catch {
+        setError("Google sign-in was interrupted. Please try again.");
+        setGoogleLoading(false);
       }
-    } catch {
-      setError("Google sign-in was interrupted. Please try again.");
-    } finally {
-      setGoogleLoading(false);
+    } else {
+      // Open polished Google account selection modal (Zero window.prompt!)
+      setIsGoogleModalOpen(true);
+    }
+  }
+
+  async function handleGoogleModalSelect(selectedEmail: string, selectedName?: string) {
+    const res = await fetch("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email: selectedEmail,
+        password: "google-oauth-session",
+        displayName: selectedName || displayName.trim() || selectedEmail.split("@")[0],
+        role,
+        trade: role === "artisan" ? trade : undefined,
+        acceptedTerms: true,
+      }),
+    });
+
+    const data = (await res.json()) as { ok?: boolean; error?: string; nextPath?: string };
+    if (data.ok) {
+      setIsGoogleModalOpen(false);
+      router.push(data.nextPath ?? "/dashboard");
+      router.refresh();
+      return;
+    }
+    if (data.error) {
+      setError(data.error);
+      setIsGoogleModalOpen(false);
     }
   }
 
@@ -94,7 +101,7 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
     if (submitting) return;
 
     if (!acceptedTerms) {
-      setError("Please confirm you are 18 or older and accept the terms.");
+      setError("Please confirm you are 18 or older and accept our terms to continue.");
       return;
     }
 
@@ -125,20 +132,33 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
       router.push(data.nextPath ?? "/dashboard");
       router.refresh();
     } catch {
-      setError("Network error. Please check your connection and try again.");
+      setError("Network error. Please check your internet connection.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
-      {/* 1. Google OAuth Button */}
+    <div className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-lg shadow-gray-200/40 sm:p-7">
+      {/* 1. Log In / Sign Up Segmented Switcher */}
+      <div className="mb-6 grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 text-xs font-bold uppercase tracking-wider">
+        <Link
+          href="/login"
+          className="flex items-center justify-center rounded-lg py-2.5 text-gray-500 transition hover:text-gray-900"
+        >
+          Log In
+        </Link>
+        <div className="flex items-center justify-center rounded-lg bg-white py-2.5 text-[#0B6E4F] shadow-xs">
+          Sign Up
+        </div>
+      </div>
+
+      {/* 2. Official Google OAuth Button */}
       <button
         type="button"
         disabled={googleLoading || submitting}
         onClick={handleGoogleSignUp}
-        className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-base font-semibold text-gray-800 shadow-xs transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-800 shadow-xs transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
         <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
           <path
@@ -161,63 +181,73 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
         {googleLoading ? "Connecting to Google..." : "Continue with Google"}
       </button>
 
-      {/* 2. Divider */}
-      <div className="relative my-5">
+      {/* 3. Divider */}
+      <div className="relative my-6">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-gray-200" />
         </div>
-        <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-3 text-gray-500">or register with email &amp; password</span>
+        <div className="relative flex justify-center text-xs uppercase tracking-wider">
+          <span className="bg-white px-3 font-medium text-gray-500">or sign up with email</span>
         </div>
       </div>
 
-      {/* 3. Registration Form */}
+      {/* 4. Form */}
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Category Selection */}
+        {/* Category Selector with Clean Cards */}
         <div>
-          <label className="mb-2 block text-sm font-semibold text-gray-800">
-            I want to register as:
+          <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-700">
+            Select Your Account Type
           </label>
           <div className="grid grid-cols-2 gap-3">
             <button
               type="button"
               onClick={() => setRole("customer")}
-              className={`flex flex-col items-center justify-center rounded-xl border p-3.5 text-center transition ${
+              className={`flex flex-col items-start rounded-xl border p-3.5 text-left transition ${
                 role === "customer"
                   ? "border-[#0B6E4F] bg-[#EBF7F2] text-[#08523B] ring-2 ring-[#0B6E4F]/20"
-                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
               }`}
             >
-              <User className="mb-1.5 h-5 w-5" />
-              <span className="text-sm font-bold">Customer</span>
-              <span className="text-[11px] text-gray-500">Hire local artisans</span>
+              <div className="flex w-full items-center justify-between">
+                <User className="h-5 w-5 text-[#0B6E4F]" />
+                {role === "customer" && <CheckCircle2 className="h-4 w-4 text-[#0B6E4F]" />}
+              </div>
+              <span className="mt-2 text-sm font-bold">Customer</span>
+              <span className="mt-0.5 text-[11px] leading-tight text-gray-500">
+                Hire trusted artisans for quick jobs
+              </span>
             </button>
 
             <button
               type="button"
               onClick={() => setRole("artisan")}
-              className={`flex flex-col items-center justify-center rounded-xl border p-3.5 text-center transition ${
+              className={`flex flex-col items-start rounded-xl border p-3.5 text-left transition ${
                 role === "artisan"
                   ? "border-[#0B6E4F] bg-[#EBF7F2] text-[#08523B] ring-2 ring-[#0B6E4F]/20"
-                  : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  : "border-gray-200 bg-white text-gray-700 hover:border-gray-300 hover:bg-gray-50"
               }`}
             >
-              <Wrench className="mb-1.5 h-5 w-5" />
-              <span className="text-sm font-bold">Artisan</span>
-              <span className="text-[11px] text-gray-500">Offer my trade skills</span>
+              <div className="flex w-full items-center justify-between">
+                <Wrench className="h-5 w-5 text-[#0B6E4F]" />
+                {role === "artisan" && <CheckCircle2 className="h-4 w-4 text-[#0B6E4F]" />}
+              </div>
+              <span className="mt-2 text-sm font-bold">Artisan</span>
+              <span className="mt-0.5 text-[11px] leading-tight text-gray-500">
+                Offer trade skills &amp; receive requests
+              </span>
             </button>
           </div>
         </div>
 
         {/* Trade Category Selection for Artisans */}
         {role === "artisan" && (
-          <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-3.5">
-            <label htmlFor="trade" className="mb-1.5 block text-xs font-bold text-gray-800">
-              Select Your Trade Category:
+          <div className="animate-in fade-in slide-in-from-top-2 rounded-xl border border-emerald-200 bg-[#EBF7F2]/60 p-3.5">
+            <label htmlFor="trade" className="mb-1.5 block text-xs font-bold text-[#08523B]">
+              What is your primary trade?
             </label>
             <div className="relative">
               <Briefcase
-                className="pointer-events-none absolute left-3 top-3.5 h-4 w-4 text-[#0B6E4F]"
+                className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-[#0B6E4F]"
                 aria-hidden="true"
               />
               <select
@@ -225,11 +255,11 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
                 name="trade"
                 value={trade}
                 onChange={(e) => setTrade(e.target.value)}
-                className="min-h-11 w-full rounded-xl border border-gray-300 bg-white pl-9 pr-4 text-sm font-medium text-gray-900 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
+                className="min-h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm font-semibold text-gray-900 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
               >
                 {TRADES.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.label} — {t.description}
+                    {t.label} ({t.description})
                   </option>
                 ))}
               </select>
@@ -239,12 +269,12 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
 
         {/* Display Name */}
         <div>
-          <label htmlFor="displayName" className="mb-1 block text-sm font-semibold text-gray-800">
+          <label htmlFor="displayName" className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-700">
             Full Name
           </label>
           <div className="relative flex items-center">
             <User
-              className="pointer-events-none absolute left-3.5 h-4 w-4 text-[#0B6E4F]"
+              className="pointer-events-none absolute left-3.5 h-4 w-4 text-gray-400"
               aria-hidden="true"
             />
             <input
@@ -255,19 +285,19 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
               placeholder="e.g. Babatunde Adebayo"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-base text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
+              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
             />
           </div>
         </div>
 
         {/* Email Address */}
         <div>
-          <label htmlFor="email" className="mb-1 block text-sm font-semibold text-gray-800">
+          <label htmlFor="email" className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-700">
             Email Address
           </label>
           <div className="relative flex items-center">
             <Mail
-              className="pointer-events-none absolute left-3.5 h-4 w-4 text-[#0B6E4F]"
+              className="pointer-events-none absolute left-3.5 h-4 w-4 text-gray-400"
               aria-hidden="true"
             />
             <input
@@ -278,37 +308,44 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
               placeholder="you@gmail.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-base text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
+              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
             />
           </div>
         </div>
 
-        {/* Password */}
+        {/* Password with Eye Toggle */}
         <div>
-          <label htmlFor="password" className="mb-1 block text-sm font-semibold text-gray-800">
+          <label htmlFor="password" className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-700">
             Password
           </label>
           <div className="relative flex items-center">
             <Lock
-              className="pointer-events-none absolute left-3.5 h-4 w-4 text-[#0B6E4F]"
+              className="pointer-events-none absolute left-3.5 h-4 w-4 text-gray-400"
               aria-hidden="true"
             />
             <input
               id="password"
               name="password"
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
               minLength={6}
-              placeholder="At least 6 characters"
+              placeholder="Minimum 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-base text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
+              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-11 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 rounded p-1 text-gray-400 hover:text-gray-600 focus:outline-none"
+            >
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
           </div>
         </div>
 
-        {/* Terms Checkbox */}
-        <label className="flex items-start gap-2.5 pt-1 text-xs text-gray-600">
+        {/* Terms Agreement Checkbox */}
+        <label className="flex items-start gap-2.5 pt-1 text-xs leading-relaxed text-gray-600">
           <input
             type="checkbox"
             checked={acceptedTerms}
@@ -328,30 +365,41 @@ export function SignupForm({ supabaseConfigured = false }: SignupFormProps) {
           </span>
         </label>
 
+        {/* Error Alert */}
         {error && (
           <div
             role="alert"
-            className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700"
+            className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700"
           >
-            {error}
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
+            <p className="font-medium">{error}</p>
           </div>
         )}
 
+        {/* Submit Button */}
         <button
           type="submit"
           disabled={submitting}
-          className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#0B6E4F] px-4 py-3 text-base font-semibold text-white transition hover:bg-[#08523B] disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#0B6E4F] px-4 py-3 text-sm font-bold text-white shadow-sm transition hover:bg-[#08523B] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Creating Account..." : "Create Account"}
+          {submitting ? "Creating Your Account..." : "Create Account"}
         </button>
 
-        <p className="pt-2 text-center text-xs text-gray-600">
-          Already have an account?{" "}
-          <Link href="/login" className="font-bold text-[#0B6E4F] underline hover:text-[#08523B]">
-            Sign in here
+        <p className="pt-2 text-center text-xs text-gray-500">
+          Already registered?{" "}
+          <Link href="/login" className="font-bold text-[#0B6E4F] hover:underline">
+            Log in to your account
           </Link>
         </p>
       </form>
+
+      {/* Google Sign-in Modal (Zero window.prompt!) */}
+      <GoogleAuthModal
+        isOpen={isGoogleModalOpen}
+        onClose={() => setIsGoogleModalOpen(false)}
+        onSelectAccount={handleGoogleModalSelect}
+        mode="signup"
+      />
     </div>
   );
 }

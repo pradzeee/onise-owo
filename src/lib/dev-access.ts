@@ -112,6 +112,7 @@ export async function getActiveDevUser(): Promise<DevUser | null> {
     const userRole = (cookieStore.get("onise_user_role")?.value as DevRole) || null;
     const userName = cookieStore.get("onise_user_name")?.value || userEmail.split("@")[0];
     const userPhone = cookieStore.get("onise_user_phone")?.value || "";
+    const userTrade = cookieStore.get("onise_user_trade")?.value || "plumber";
 
     return {
       id: `u-${Buffer.from(userEmail).toString("hex").slice(0, 12)}`,
@@ -119,11 +120,12 @@ export async function getActiveDevUser(): Promise<DevUser | null> {
       phone: userPhone,
       role: userRole || ("customer" as DevRole),
       display_name: userName,
+      trade: userTrade,
       account_status: "active",
       verification_status: "approved",
       rating_avg: 5.0,
       rating_count: 0,
-    };
+    } as DevUser & { trade?: string };
   } catch {
     return null;
   }
@@ -528,7 +530,7 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
         phone: devUser.phone,
         role: "authenticated",
         app_metadata: {},
-        user_metadata: { role: devUser.role },
+        user_metadata: { role: devUser.role, trade: (devUser as any)?.trade },
         created_at: "2026-11-01T00:00:00Z",
       }
     : null;
@@ -634,7 +636,7 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
           if (currentUser && !data.some((a) => a.user_id === currentUser.id)) {
             data.push({
               user_id: currentUser.id,
-              trade: "plumber",
+              trade: (currentUser.user_metadata as any)?.trade || (devUser as any)?.trade || "plumber",
               is_online: false,
               last_seen_at: null,
               verification_status: "approved",

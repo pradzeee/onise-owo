@@ -46,10 +46,26 @@ export async function POST(request: NextRequest) {
 
     const { email, password, displayName, role, trade } = parsed.data;
 
-    // 1. Live Supabase Registration
+    // 1. Live Supabase Registration Flow
     if (isRealSupabaseConfigured()) {
       const supabase = await createSupabaseServerClient();
       const origin = request.nextUrl.origin;
+
+      // Duplicate email check: check if profile with this email already exists
+      const { data: existingProfile } = await supabase
+        .from("profiles")
+        .select("id, role")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (existingProfile) {
+        return NextResponse.json(
+          {
+            error: `An account with this email already exists as a ${existingProfile.role}. Please log in instead.`,
+          },
+          { status: 409 },
+        );
+      }
 
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -66,13 +82,26 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         logger.warn("auth.signup_failed", { message: error.message });
+        const isDuplicate = error.message.toLowerCase().includes("already registered") ||
+          error.message.toLowerCase().includes("user already exists");
         return NextResponse.json(
-          { error: error.message || "Could not complete registration." },
-          { status: 400 },
+          {
+            error: isDuplicate
+              ? "An account with this email already exists. Please log in instead."
+              : error.message || "Could not complete registration.",
+          },
+          { status: isDuplicate ? 409 : 400 },
         );
       }
 
-      // If user session is established immediately, complete their onboarding record
+      // Supabase anti-enumeration check: empty identities indicates duplicate user
+      if (data.user?.identities && data.user.identities.length === 0) {
+        return NextResponse.json(
+          { error: "An account with this email already exists. Please log in instead." },
+          { status: 409 },
+        );
+      }
+
       if (data.user) {
         await supabase.rpc("complete_onboarding", {
           p_role: role,
@@ -101,30 +130,47 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Preview / Demo Mode (Instant Registration)
+    // 2. Preview / Demo Mode (Strict Duplicate Email Protection)
     if (isDevAccessAllowed()) {
       const cookieStore = await cookies();
+      const rawUsers = cookieStore.get("onise_registered_users")?.value;
+      const registeredUsers: Record<string, {
+        email: string;
+        displayName: string;
+        role: "customer" | "artisan";
+        trade?: string;
+        createdAt: string;
+      }> = rawUsers ? JSON.parse(rawUsers) : {};
 
-      cookieStore.set("onise_user_email", email, {
+      if (registeredUsers[email]) {
+        const existing = registeredUsers[email];
+        return NextResponse.json(
+          {
+            error: `An account with this email already exists as a ${existing.role}. Please log in instead.`,
+          },
+          { status: 409 },
+        );
+      }
+
+      registeredUsers[email] = {
+        email,
+        displayName,
+        role,
+        trade: role === "artisan" ? trade : undefined,
+        createdAt: new Date().toISOString(),
+      };
+
+      cookieStore.set("onise_registered_users", JSON.stringify(registeredUsers), {
         path: "/",
         sameSite: "lax",
+        httpOnly: true,
       });
 
-      cookieStore.set("onise_user_name", displayName, {
-        path: "/",
-        sameSite: "lax",
-      });
-
-      cookieStore.set("onise_user_role", role, {
-        path: "/",
-        sameSite: "lax",
-      });
-
+      cookieStore.set("onise_user_email", email, { path: "/", sameSite: "lax" });
+      cookieStore.set("onise_user_name", displayName, { path: "/", sameSite: "lax" });
+      cookieStore.set("onise_user_role", role, { path: "/", sameSite: "lax" });
       if (role === "artisan" && trade) {
-        cookieStore.set("onise_user_trade", trade, {
-          path: "/",
-          sameSite: "lax",
-        });
+        cookieStore.set("onise_user_trade", trade, { path: "/", sameSite: "lax" });
       }
 
       return NextResponse.json({
