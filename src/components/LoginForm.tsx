@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Mail, ShieldCheck } from "lucide-react";
+import { Lock, Mail } from "lucide-react";
 import {
   createSupabaseBrowserClient,
   isSupabaseConfigured,
@@ -15,15 +16,14 @@ interface LoginFormProps {
 export function LoginForm({ supabaseConfigured }: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
 
   async function handleGoogleSignIn() {
     if (googleLoading) return;
     setError(null);
-    setInfo(null);
     setGoogleLoading(true);
 
     try {
@@ -70,50 +70,39 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
         }
       }
     } catch {
-      setError("Google sign-in was interrupted. Please try entering your email below.");
+      setError("Google sign-in was interrupted. Please try again.");
     } finally {
       setGoogleLoading(false);
     }
   }
 
-  async function handleEmailSignIn(e: React.FormEvent) {
+  async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
     if (submitting) return;
 
     setError(null);
-    setInfo(null);
     setSubmitting(true);
 
     try {
-      const res = await fetch("/api/auth/email-login", {
+      const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = (await res.json()) as {
         ok?: boolean;
         error?: string;
-        sent?: boolean;
-        instantLogin?: boolean;
         nextPath?: string;
-        message?: string;
       };
 
-      if (!res.ok) {
-        setError(data.error ?? "Could not complete sign in.");
+      if (!res.ok || !data.ok) {
+        setError(data.error ?? "Invalid email or password.");
         return;
       }
 
-      if (data.instantLogin) {
-        router.push(data.nextPath ?? "/onboarding");
-        router.refresh();
-        return;
-      }
-
-      if (data.sent) {
-        setInfo(data.message ?? `Check your inbox at ${email} for your sign-in link.`);
-      }
+      router.push(data.nextPath ?? "/dashboard");
+      router.refresh();
     } catch {
       setError("Network error. Please check your connection and try again.");
     } finally {
@@ -128,9 +117,8 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
         type="button"
         disabled={googleLoading || submitting}
         onClick={handleGoogleSignIn}
-        className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-800 transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20 disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-base font-semibold text-gray-800 shadow-xs transition hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {/* Official Google G Logo SVG */}
         <svg className="h-5 w-5 shrink-0" viewBox="0 0 24 24" aria-hidden="true">
           <path
             fill="#4285F4"
@@ -158,15 +146,15 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
           <div className="w-full border-t border-gray-200" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-white px-3 text-gray-500">or sign in with Gmail address</span>
+          <span className="bg-white px-3 text-gray-500">or sign in with password</span>
         </div>
       </div>
 
-      {/* 3. Gmail / Email Input Form */}
-      <form onSubmit={handleEmailSignIn} className="space-y-4">
+      {/* 3. Email & Password Form */}
+      <form onSubmit={handlePasswordLogin} className="space-y-4">
         <div>
-          <label htmlFor="email" className="mb-1.5 block text-sm font-semibold text-gray-800">
-            Gmail or work email
+          <label htmlFor="email" className="mb-1 block text-sm font-semibold text-gray-800">
+            Email Address
           </label>
           <div className="relative flex items-center">
             <Mail
@@ -185,18 +173,30 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
               className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-base text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
             />
           </div>
-          <p className="mt-1.5 text-xs text-gray-500">
-            No password or SMS code required. You can manually add your Nigerian phone number in your
-            profile later.
-          </p>
         </div>
 
-        {info ? (
-          <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-[#EBF7F2] p-3 text-xs text-[#08523B]">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-            <p>{info}</p>
+        <div>
+          <label htmlFor="password" className="mb-1 block text-sm font-semibold text-gray-800">
+            Password
+          </label>
+          <div className="relative flex items-center">
+            <Lock
+              className="pointer-events-none absolute left-3.5 h-4 w-4 text-[#0B6E4F]"
+              aria-hidden="true"
+            />
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autoComplete="current-password"
+              required
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="min-h-12 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-base text-gray-900 placeholder:text-gray-400 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
+            />
           </div>
-        ) : null}
+        </div>
 
         {error ? (
           <div
@@ -209,11 +209,18 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
 
         <button
           type="submit"
-          disabled={submitting || !email}
+          disabled={submitting || !email || !password}
           className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#0B6E4F] px-4 py-3 text-base font-semibold text-white transition hover:bg-[#08523B] disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {submitting ? "Signing in..." : "Continue with Gmail"}
+          {submitting ? "Signing in..." : "Log In"}
         </button>
+
+        <p className="pt-2 text-center text-xs text-gray-600">
+          Don&apos;t have an account?{" "}
+          <Link href="/signup" className="font-bold text-[#0B6E4F] underline hover:text-[#08523B]">
+            Register here
+          </Link>
+        </p>
       </form>
     </div>
   );

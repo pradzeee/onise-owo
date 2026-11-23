@@ -538,6 +538,33 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
       async getUser() {
         return { data: { user: currentUser }, error: null };
       },
+      async signInWithPassword({ email }: { email: string; password?: string }) {
+        const u = {
+          id: `u-${Buffer.from(email).toString("hex").slice(0, 12)}`,
+          email,
+          role: "authenticated",
+          app_metadata: {},
+          user_metadata: {},
+          created_at: new Date().toISOString(),
+        };
+        return { data: { user: u, session: {} }, error: null };
+      },
+      async signUp({ email, options }: any) {
+        const role = options?.data?.role || "customer";
+        const u = {
+          id: `u-${Buffer.from(email).toString("hex").slice(0, 12)}`,
+          email,
+          role: "authenticated",
+          app_metadata: {},
+          user_metadata: {
+            role,
+            trade: options?.data?.trade,
+            display_name: options?.data?.display_name,
+          },
+          created_at: new Date().toISOString(),
+        };
+        return { data: { user: u, session: {} }, error: null };
+      },
       async signInWithOtp() {
         return { data: {}, error: null };
       },
@@ -602,9 +629,22 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
           }
           break;
         }
-        case "artisan_profiles":
+        case "artisan_profiles": {
           data = [...MOCK_ARTISAN_PROFILES];
+          if (currentUser && !data.some((a) => a.user_id === currentUser.id)) {
+            data.push({
+              user_id: currentUser.id,
+              trade: "plumber",
+              is_online: false,
+              last_seen_at: null,
+              verification_status: "approved",
+              nin_hash: null,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            });
+          }
           break;
+        }
         case "jobs":
           data = [...MOCK_JOBS];
           break;

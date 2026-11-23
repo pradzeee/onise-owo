@@ -45,7 +45,7 @@ export default async function LoginPage() {
             Sign in to {APP_NAME}
           </h1>
           <p className="mt-1.5 text-sm text-gray-600">
-            Sign in with your Gmail or Google account to get started.
+            Log in with Google, or enter your email and password.
           </p>
         </div>
 

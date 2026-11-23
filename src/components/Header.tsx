@@ -33,12 +33,20 @@ export function Header({ isAuthenticated = false, roleLabel }: HeaderProps) {
               <LogoutButton />
             </>
           ) : (
-            <Link
-              href="/login"
-              className="inline-flex min-h-10 items-center rounded-lg bg-[#0B6E4F] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#08523B]"
-            >
-              Sign in
-            </Link>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <Link
+                href="/login"
+                className="px-2.5 py-1.5 text-sm font-semibold text-gray-700 transition hover:text-[#0B6E4F]"
+              >
+                Log in
+              </Link>
+              <Link
+                href="/signup"
+                className="inline-flex min-h-9 items-center rounded-lg bg-[#0B6E4F] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#08523B]"
+              >
+                Sign up
+              </Link>
+            </div>
           )}
         </nav>
       </div>

@@ -26,17 +26,17 @@ export default function HomePage() {
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">
             <Link
-              href="/login"
+              href="/signup"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-5 py-3 text-base font-bold text-gray-950 transition hover:bg-amber-300"
             >
-              Get started with Google
+              Get started — Register now
               <ArrowRight className="h-4 w-4" aria-hidden="true" />
             </Link>
             <Link
-              href="/privacy"
+              href="/login"
               className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
             >
-              How we protect your privacy
+              Sign in to your account
             </Link>
           </div>
         </section>
