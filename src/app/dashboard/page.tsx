@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Briefcase, Search, ShieldCheck, UserCheck } from "lucide-react";
+import { ArrowRight, Briefcase, Phone, Search, ShieldCheck, UserCheck } from "lucide-react";
 import { ArtisanOnlineSwitch } from "@/components/ArtisanOnlineSwitch";
 import { ConsentsManager } from "@/components/ConsentsManager";
 import { Header } from "@/components/Header";
@@ -43,6 +44,10 @@ export default async function DashboardPage() {
   if (!profile?.role) {
     redirect("/onboarding");
   }
+
+  const cookieStore = await cookies();
+  const previewPhone = cookieStore.get("onise_user_phone")?.value;
+  const userPhone = (profile as { phone?: string | null })?.phone || user.phone || previewPhone;
 
   const [{ data: consentsData }, { data: artisanData }] = await Promise.all([
     supabase
@@ -121,6 +126,28 @@ export default async function DashboardPage() {
               </dd>
             </div>
           </dl>
+
+          {/* Missing phone number reminder banner */}
+          {!userPhone && (
+            <div className="mt-4 flex flex-col gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-2.5 text-xs text-blue-950">
+                <Phone className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" aria-hidden="true" />
+                <div>
+                  <p className="font-bold">Add your Nigerian Phone Number</p>
+                  <p className="mt-0.5 text-blue-800">
+                    Add your mobile number in Settings to receive SMS alerts and allow contacts to reach you for jobs.
+                  </p>
+                </div>
+              </div>
+              <Link
+                href="/settings"
+                className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                Add Phone
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          )}
 
           {/* Role-specific primary action banner */}
           {profile.role === "artisan" ? (

@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
-import { DevAccessBanner } from "@/components/DevAccessBanner";
 import { PwaRegistrar } from "@/components/PwaRegistrar";
 import "./globals.css";
 
@@ -33,7 +32,6 @@ export default function RootLayout({
   return (
     <html lang="en-NG">
       <body className="min-h-dvh bg-[#FAFAF8] text-gray-900 antialiased">
-        <DevAccessBanner />
         <PwaRegistrar />
         {children}
       </body>

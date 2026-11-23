@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeft, Settings } from "lucide-react";
@@ -30,6 +31,9 @@ export default async function SettingsPage() {
     redirect("/login");
   }
 
+  const cookieStore = await cookies();
+  const initialPhone = user.phone ?? cookieStore.get("onise_user_phone")?.value ?? null;
+
   const { data: profileData } = await supabase
     .from("profiles")
     .select("role, account_status")
@@ -59,14 +63,14 @@ export default async function SettingsPage() {
             Privacy &amp; Account Settings
           </h1>
           <p className="mt-1 text-sm text-gray-600">
-            Download a copy of your data, pause your artisan listing, or permanently
-            delete your account.
+            Manage your Nigerian phone number, download your data, pause listings, or delete your account.
           </p>
         </div>
 
         <SettingsClient
           role={profile.role}
           initialAccountStatus={profile.account_status}
+          initialPhone={initialPhone}
         />
 
         <div className="flex flex-wrap gap-4 text-xs text-gray-500">
