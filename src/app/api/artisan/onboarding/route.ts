@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { LEGAL_VERSIONS, TRADES, type ArtisanTrade } from "@/lib/constants";
 import { generateGuarantorToken } from "@/lib/guarantor";
+import { resolveAppBaseUrl } from "@/lib/http";
 import {
   fetchFirestoreUserProfile,
   getActiveFirebaseSession,
@@ -518,9 +519,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const appUrl = (
-      process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin
-    ).replace(/\/$/, "");
+    const appUrl = resolveAppBaseUrl(request);
     const guarantorLink = `${appUrl}/guarantor/${rawToken}`;
 
     const smsResult = await sendNigerianSms({

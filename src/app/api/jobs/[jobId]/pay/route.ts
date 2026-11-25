@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveAppBaseUrl } from "@/lib/http";
 import { logger } from "@/lib/logger";
 import { formatKoboAsNaira } from "@/lib/money";
 import {
@@ -158,9 +159,7 @@ export async function POST(
       );
     }
 
-    const appUrl = (
-      process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin
-    ).replace(/\/$/, "");
+    const appUrl = resolveAppBaseUrl(request);
     const callbackUrl = `${appUrl}/jobs/${jobId}?payment=returned`;
 
     // Paystack requires an email field; use customer's email or a deterministic synthetic placeholder (never phone!)

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { resolveAppBaseUrl } from "@/lib/http";
 import { generateJobShareToken } from "@/lib/jobs";
 import { logger } from "@/lib/logger";
 import { maskPhoneForUi } from "@/lib/phone";
@@ -72,9 +73,7 @@ export async function POST(
       return NextResponse.json({ error: "Could not create share link." }, { status: 500 });
     }
 
-    const appUrl = (
-      process.env.NEXT_PUBLIC_APP_URL ?? request.nextUrl.origin
-    ).replace(/\/$/, "");
+    const appUrl = resolveAppBaseUrl(request);
     const shareUrl = `${appUrl}/track/${rawToken}`;
 
     let smsDispatched = false;

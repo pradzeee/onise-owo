@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import type { NextRequest } from "next/server";
 import { describe, expect, it } from "vitest";
 import { normalizeDisplayName } from "@/lib/firebase/server";
 import {
@@ -8,6 +9,7 @@ import {
   verifyFirebaseSessionCookie,
   type FirebaseSessionPayload,
 } from "@/lib/firebase/session-cookie";
+import { resolveAppBaseUrl } from "@/lib/http";
 
 function makeFakeJwt(payloadObj: Record<string, unknown>): string {
   const b64 = (obj: unknown) =>
@@ -101,5 +103,23 @@ describe("Standardized Firebase Auth Session & Firestore Security", () => {
     expect(rules).toContain("data.role in ['customer', 'artisan']");
     expect(rules).toContain("allow delete: if false;");
     expect(rules).toContain("allow read, write: if false;");
+  });
+
+  it("ignores localhost NEXT_PUBLIC_APP_URL when running on Vercel", () => {
+    const prevVercel = process.env.VERCEL;
+    const prevAppUrl = process.env.NEXT_PUBLIC_APP_URL;
+    process.env.VERCEL = "1";
+    process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
+
+    const fakeReq = {
+      nextUrl: { origin: "https://onise-owo.vercel.app" },
+    } as unknown as NextRequest;
+
+    expect(resolveAppBaseUrl(fakeReq)).toBe("https://onise-owo.vercel.app");
+
+    if (prevVercel === undefined) delete process.env.VERCEL;
+    else process.env.VERCEL = prevVercel;
+    if (prevAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
+    else process.env.NEXT_PUBLIC_APP_URL = prevAppUrl;
   });
 });
