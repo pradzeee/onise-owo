@@ -2,15 +2,34 @@ import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, Briefcase, Phone, Search, ShieldCheck, UserCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Briefcase,
+  Phone,
+  Search,
+  Settings,
+  ShieldCheck,
+  UserCheck,
+  Wrench,
+} from "lucide-react";
 import { ArtisanOnlineSwitch } from "@/components/ArtisanOnlineSwitch";
 import { ConsentsManager } from "@/components/ConsentsManager";
 import { Header } from "@/components/Header";
 import { PushNotificationsCard } from "@/components/PushNotificationsCard";
 import { TrustedContactCard } from "@/components/TrustedContactCard";
-import type { ConsentRecord, ProfileRecord } from "@/lib/constants";
+import {
+  TRADES,
+  type ConsentRecord,
+  type ProfileRecord,
+} from "@/lib/constants";
+import {
+  fetchFirestoreUserProfile,
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+} from "@/lib/firebase/server";
 import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "@/lib/supabase/server";
 
@@ -47,7 +66,9 @@ export default async function DashboardPage() {
 
   const cookieStore = await cookies();
   const previewPhone = cookieStore.get("onise_user_phone")?.value;
-  const userPhone = (profile as { phone?: string | null })?.phone || user.phone || previewPhone;
+  let userPhone =
+    (profile as { phone?: string | null })?.phone || user.phone || previewPhone;
+  let artisanTrade = (user.user_metadata as { trade?: string } | undefined)?.trade;
 
   const [{ data: consentsData }, { data: artisanData }] = await Promise.all([
     supabase
@@ -60,29 +81,69 @@ export default async function DashboardPage() {
     profile.role === "artisan"
       ? supabase
           .from("artisan_profiles")
-          .select("is_online, last_seen_at, verification_status")
+          .select("is_online, last_seen_at, verification_status, trade")
           .eq("user_id", user.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
 
-  const consents = (consentsData ?? []) as ConsentRecord[];
+  let consents = (consentsData ?? []) as ConsentRecord[];
+
+  // Hydrate live Firebase/Firestore user consents, phone, and trade when active
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (fbSession) {
+      if (!userPhone && fbSession.phone) userPhone = fbSession.phone;
+      if (!artisanTrade && fbSession.trade) artisanTrade = fbSession.trade;
+      if (fbSession.idToken) {
+        const fsProfile = await fetchFirestoreUserProfile(
+          fbSession.uid,
+          fbSession.idToken,
+        );
+        if (fsProfile) {
+          if (fsProfile.phone) userPhone = fsProfile.phone;
+          if (fsProfile.trade) artisanTrade = fsProfile.trade;
+          const entries = Object.entries(fsProfile.consents ?? {});
+          if (entries.length > 0) {
+            const ts = fsProfile.updatedAt || fsProfile.createdAt;
+            consents = entries
+              .filter(([, granted]) => typeof granted === "boolean")
+              .map(([consentType, granted]) => ({
+                id: `fs-${fsProfile.uid}-${consentType}`,
+                user_id: fsProfile.uid,
+                consent_type: consentType as ConsentRecord["consent_type"],
+                version: fsProfile.acceptedTermsVersion || "2026-11-v1",
+                granted: Boolean(granted),
+                consented_at: ts,
+                withdrawn_at: granted ? null : ts,
+                created_at: ts,
+              }));
+          }
+        }
+      }
+    }
+  }
+
+  const resolvedTradeId = artisanData?.trade ?? artisanTrade;
+  const resolvedTradeLabel =
+    TRADES.find((t) => t.id === resolvedTradeId)?.label ?? resolvedTradeId;
+
   const hasLocationConsent = consents.some(
     (c) => c.consent_type === "location" && c.granted && !c.withdrawn_at,
   );
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header isAuthenticated roleLabel={profile.role} />
 
-      <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:py-8">
-        <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <section className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#0B6E4F]">
+              <p className="text-xs font-bold uppercase tracking-wider text-[#0B6E4F]">
                 Signed in
               </p>
-              <h1 className="mt-1 text-xl font-extrabold text-gray-900 sm:text-2xl">
+              <h1 className="mt-1 text-2xl font-black tracking-tight text-gray-900 sm:text-3xl">
                 {profile.display_name
                   ? profile.display_name
                   : profile.role === "artisan"
@@ -91,34 +152,50 @@ export default async function DashboardPage() {
                       ? "Admin Account"
                       : "Customer Account"}
               </h1>
+              {user.email ? (
+                <p className="mt-0.5 text-xs text-gray-500">{user.email}</p>
+              ) : null}
             </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EBF7F2] px-3 py-1 text-xs font-semibold capitalize text-[#08523B]">
-              <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              Status: {profile.account_status}
-            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {profile.role === "artisan" && resolvedTradeLabel ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-bold text-[#08523B]">
+                  <Wrench className="h-3.5 w-3.5 text-[#0B6E4F]" aria-hidden="true" />
+                  {resolvedTradeLabel}
+                </span>
+              ) : null}
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EBF7F2] px-3 py-1 text-xs font-bold capitalize text-[#08523B]">
+                <UserCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                {profile.account_status}
+              </span>
+            </div>
           </div>
 
-          <dl className="mt-4 grid gap-3 border-t border-gray-100 pt-4 text-xs sm:grid-cols-3">
-            <div className="rounded-xl bg-gray-50 p-3">
-              <dt className="text-gray-500">Account role</dt>
-              <dd className="mt-0.5 font-bold capitalize text-gray-900">{profile.role}</dd>
+          <dl className="mt-5 grid gap-3 border-t border-gray-100 pt-4 text-xs sm:grid-cols-3">
+            <div className="rounded-xl border border-gray-100 bg-[#F8FAF9] p-3.5">
+              <dt className="font-medium text-gray-500">Account role</dt>
+              <dd className="mt-1 text-sm font-bold capitalize text-gray-900">
+                {profile.role}
+                {profile.role === "artisan" && resolvedTradeLabel
+                  ? ` • ${resolvedTradeLabel}`
+                  : ""}
+              </dd>
             </div>
-            <div className="rounded-xl bg-gray-50 p-3">
-              <dt className="text-gray-500">Verification</dt>
-              <dd className="mt-0.5 font-bold capitalize text-gray-900">
+            <div className="rounded-xl border border-gray-100 bg-[#F8FAF9] p-3.5">
+              <dt className="font-medium text-gray-500">Verification</dt>
+              <dd className="mt-1 text-sm font-bold capitalize text-gray-900">
                 {profile.verification_status}
               </dd>
             </div>
-            <div className="rounded-xl bg-gray-50 p-3">
-              <dt className="text-gray-500">Rating</dt>
-              <dd className="mt-0.5 font-bold text-gray-900">
+            <div className="rounded-xl border border-gray-100 bg-[#F8FAF9] p-3.5">
+              <dt className="font-medium text-gray-500">Rating</dt>
+              <dd className="mt-1 text-sm font-bold text-gray-900">
                 {profile.rating_count > 0
                   ? `★ ${Number(profile.rating_avg).toFixed(2)} (${profile.rating_count})`
                   : "No reviews yet"}
                 {profile.role === "artisan" && profile.verification_status === "approved" ? (
                   <Link
                     href={`/artisans/${user.id}`}
-                    className="ml-2 font-medium text-[#0B6E4F] underline"
+                    className="ml-2 text-xs font-semibold text-[#0B6E4F] underline"
                   >
                     View profile
                   </Link>
@@ -141,7 +218,7 @@ export default async function DashboardPage() {
               </div>
               <Link
                 href="/settings"
-                className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-bold text-white transition hover:bg-blue-700"
               >
                 Add Phone
                 <ArrowRight className="h-3.5 w-3.5" />
@@ -171,7 +248,7 @@ export default async function DashboardPage() {
               </div>
               <Link
                 href="/artisan/onboarding"
-                className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0B6E4F] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#08523B]"
+                className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0B6E4F] px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-[#08523B]"
               >
                 {profile.verification_status === "unverified"
                   ? "Start verification"
@@ -194,20 +271,20 @@ export default async function DashboardPage() {
               <div className="flex flex-wrap gap-2">
                 <Link
                   href="/admin"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0B6E4F] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#08523B]"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0B6E4F] px-3.5 py-2 text-xs font-bold text-white hover:bg-[#08523B]"
                 >
                   Admin Dashboard
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
                 <Link
                   href="/admin/verifications"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3.5 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-bold text-amber-950 hover:bg-amber-100"
                 >
                   Verifications
                 </Link>
                 <Link
                   href="/admin/reconciliation"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3.5 py-2 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-bold text-amber-950 hover:bg-amber-100"
                 >
                   Reconciliation
                 </Link>
@@ -228,14 +305,14 @@ export default async function DashboardPage() {
               <div className="flex flex-wrap gap-2">
                 <Link
                   href="/find"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#0B6E4F] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#08523B]"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0B6E4F] px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-[#08523B]"
                 >
                   Find artisans
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
                 <Link
                   href="/jobs/new"
-                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#0B6E4F] bg-white px-3.5 py-2 text-xs font-semibold text-[#0B6E4F] hover:bg-[#EBF7F2]"
+                  className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl border border-[#0B6E4F] bg-white px-4 py-2 text-xs font-bold text-[#0B6E4F] transition hover:bg-[#EBF7F2]"
                 >
                   New request
                 </Link>
@@ -244,29 +321,48 @@ export default async function DashboardPage() {
           )}
         </section>
 
-        {/* Step 4: Jobs & Requests Inbox shortcut */}
-        <section className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-start gap-2.5">
-            <Briefcase className="mt-0.5 h-5 w-5 shrink-0 text-[#0B6E4F]" />
-            <div>
-              <h2 className="text-base font-bold text-gray-900">Jobs &amp; Requests</h2>
-              <p className="mt-0.5 text-xs text-gray-600">
-                {profile.role === "artisan"
-                  ? "View incoming nearest-3 / direct requests, send quotes in Naira, and enter customer start codes."
-                  : "Track your active job requests, review artisan quotes, view your 4-digit start code, or share live job status."}
-              </p>
-            </div>
-          </div>
+        {/* Quick Navigation Grid */}
+        <section className="grid gap-3.5 sm:grid-cols-2">
           <Link
             href="/jobs"
-            className="inline-flex min-h-11 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-[#0B6E4F] px-4 py-2 text-xs font-bold text-white hover:bg-[#08523B]"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-[#0B6E4F]/50 hover:shadow-md"
           >
-            Open Jobs
-            <ArrowRight className="h-3.5 w-3.5" />
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EBF7F2] text-[#0B6E4F]">
+                <Briefcase className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">Jobs &amp; Requests</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  {profile.role === "artisan"
+                    ? "Incoming requests, Naira quotes & start codes."
+                    : "Track requests, quotes, start codes & share status."}
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 shrink-0 text-[#0B6E4F]" />
+          </Link>
+
+          <Link
+            href="/settings"
+            className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-[#0B6E4F]/50 hover:shadow-md"
+          >
+            <div className="flex items-start gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EBF7F2] text-[#0B6E4F]">
+                <Settings className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="text-sm font-bold text-gray-900">Account &amp; Phone Settings</h2>
+                <p className="mt-0.5 text-xs text-gray-500">
+                  Update phone number, download data, or manage privacy.
+                </p>
+              </div>
+            </div>
+            <ArrowRight className="h-4 w-4 shrink-0 text-[#0B6E4F]" />
           </Link>
         </section>
 
-        {/* Step 3: Artisan Online/Offline switch with 60s heartbeat + Wake Lock */}
+        {/* Artisan Online/Offline switch */}
         {profile.role === "artisan" ? (
           <ArtisanOnlineSwitch
             verificationStatus={
@@ -279,13 +375,9 @@ export default async function DashboardPage() {
           />
         ) : null}
 
-        {/* Step 4: Trusted contact for Share Job & SOS */}
+        {/* Trusted contact & Notifications & Consents */}
         <TrustedContactCard />
-
-        {/* Step 3: Web Push + 30s SMS Backup Alerts */}
         <PushNotificationsCard />
-
-        {/* Step 1: Separate withdrawable consents */}
         <ConsentsManager role={profile.role} initialConsents={consents} />
 
         <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-gray-500">

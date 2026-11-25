@@ -24,10 +24,10 @@ export default async function GuarantorConfirmPage({
 
   if (!isSupabaseAdminConfigured() || !token || token.length < 16) {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
         <Header />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 text-center shadow-sm">
             <h1 className="text-lg font-bold text-gray-900">Invalid guarantor link</h1>
             <p className="mt-2 text-sm text-gray-600">
               This confirmation link is invalid or has expired. Ask the artisan to
@@ -56,10 +56,10 @@ export default async function GuarantorConfirmPage({
 
   if (!guarantor) {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
         <Header />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 text-center shadow-sm">
             <h1 className="text-lg font-bold text-gray-900">Link not found</h1>
             <p className="mt-2 text-sm text-gray-600">
               This guarantor confirmation link is no longer valid.
@@ -77,7 +77,7 @@ export default async function GuarantorConfirmPage({
     .maybeSingle();
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header />
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-8">
         <GuarantorConfirmClient

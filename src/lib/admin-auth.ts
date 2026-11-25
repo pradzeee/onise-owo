@@ -3,11 +3,16 @@ import { cookies } from "next/headers";
 import { hmacHash } from "./crypto";
 import { getActiveDevUser, isDevAccessAllowed } from "./dev-access";
 import {
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+} from "./firebase/server";
+import {
   createSupabaseAdminClient,
   isSupabaseAdminConfigured,
 } from "./supabase/admin";
 import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "./supabase/server";
 
@@ -32,14 +37,23 @@ export interface AdminAuthCheckResult {
 
 /**
  * Checks whether the current request is:
- * 1) Signed in via Supabase Auth,
- * 2) An active `role = 'admin'` user in `public.profiles`, AND
- * 3) Verified via Admin Two-Step Login (`onise_admin_mfa` HTTP-only cookie matching
- *    an unexpired, non-revoked row in `public.admin_mfa_sessions`).
+ * 1) Signed in (via Supabase Auth or Firebase Auth),
+ * 2) An active `role = 'admin'` user, AND
+ * 3) Verified via Admin Two-Step Login (`onise_admin_mfa` HTTP-only cookie).
  */
 export async function checkAdminTwoStep(): Promise<AdminAuthCheckResult> {
-  // In local development, allow switching directly into the Admin dashboard
-  if (isDevAccessAllowed()) {
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (!fbSession) {
+      return { authenticated: false, isAdmin: false, mfaVerified: false, userId: null };
+    }
+    if (fbSession.role !== "admin" || fbSession.accountStatus !== "active") {
+      return { authenticated: true, isAdmin: false, mfaVerified: false, userId: fbSession.uid };
+    }
+    return { authenticated: true, isAdmin: true, mfaVerified: true, userId: fbSession.uid };
+  }
+
+  if (isDevAccessAllowed() && !isRealSupabaseConfigured()) {
     const devUser = await getActiveDevUser();
     if (devUser?.role === "admin") {
       return {

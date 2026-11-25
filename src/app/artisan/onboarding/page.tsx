@@ -1,13 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, CheckCircle2, Clock, ShieldAlert } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Clock, ShieldAlert, ShieldCheck } from "lucide-react";
 import { ArtisanOnboardingForm } from "@/components/ArtisanOnboardingForm";
 import { Header } from "@/components/Header";
-import type {
-  ArtisanProfileRecord,
-  ArtisanVerificationRecord,
-  GuarantorVerificationRecord,
+import {
+  TRADES,
+  type ArtisanProfileRecord,
+  type ArtisanTrade,
+  type ArtisanVerificationRecord,
+  type GuarantorVerificationRecord,
 } from "@/lib/constants";
 import {
   createSupabaseServerClient,
@@ -37,7 +39,7 @@ export default async function ArtisanOnboardingPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, verification_status, account_status")
+    .select("role, display_name, verification_status, account_status")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -76,34 +78,52 @@ export default async function ArtisanOnboardingPage() {
 
   const canSubmitForm =
     !artisan ||
+    artisan.verification_status === "unverified" ||
     artisan.verification_status === "rejected" ||
     verification?.provider_status === "failed";
 
+  const metaTrade = (user.user_metadata as { trade?: string } | undefined)?.trade;
+  const defaultTrade = TRADES.some((t) => t.id === (artisan?.trade ?? metaTrade))
+    ? ((artisan?.trade ?? metaTrade) as ArtisanTrade)
+    : "plumber";
+  const defaultName =
+    artisan?.full_name ??
+    profile.display_name ??
+    (user.user_metadata as { display_name?: string } | undefined)?.display_name ??
+    "";
+
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header isAuthenticated roleLabel="artisan" />
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-6 sm:py-8">
-        <div>
+      <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs sm:p-6">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 hover:text-gray-900"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to dashboard
           </Link>
-          <h1 className="mt-2 text-2xl font-extrabold tracking-tight text-gray-900">
-            Artisan Verification
-          </h1>
-          <p className="mt-1 text-sm text-gray-600">
-            Complete your profile, NIN face match &amp; liveness check, payout setup, and
-            guarantor confirmation. Only approved artisans can go Online.
-          </p>
+          <div className="mt-3 flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EBF7F2] text-[#0B6E4F]">
+              <ShieldCheck className="h-5 w-5" />
+            </span>
+            <div>
+              <h1 className="text-xl font-black tracking-tight text-gray-900 sm:text-2xl">
+                Artisan Verification
+              </h1>
+              <p className="mt-0.5 text-xs text-gray-500 sm:text-sm">
+                Complete your profile, NIN face match &amp; liveness check, payout setup, and
+                guarantor confirmation. Only approved artisans can go Online.
+              </p>
+            </div>
+          </div>
         </div>
 
         {/* Live verification progress summary if submitted */}
         {artisan ? (
-          <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+          <section className="space-y-4 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm sm:p-6">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-bold text-gray-900">
                 Current Verification Status
@@ -133,7 +153,7 @@ export default async function ArtisanOnboardingPage() {
             ) : null}
 
             <div className="grid gap-3 text-xs sm:grid-cols-3">
-              <div className="rounded-xl bg-gray-50 p-3">
+              <div className="rounded-xl bg-[#F8FAF9] p-3">
                 <div className="flex items-center gap-1.5 font-semibold text-gray-900">
                   {verification?.provider_status === "passed" ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -147,7 +167,7 @@ export default async function ArtisanOnboardingPage() {
                 </p>
               </div>
 
-              <div className="rounded-xl bg-gray-50 p-3">
+              <div className="rounded-xl bg-[#F8FAF9] p-3">
                 <div className="flex items-center gap-1.5 font-semibold text-gray-900">
                   {guarantor?.status === "confirmed" ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -168,7 +188,7 @@ export default async function ArtisanOnboardingPage() {
                 ) : null}
               </div>
 
-              <div className="rounded-xl bg-gray-50 p-3">
+              <div className="rounded-xl bg-[#F8FAF9] p-3">
                 <div className="flex items-center gap-1.5 font-semibold text-gray-900">
                   {artisan.payout_recipient_code ? (
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
@@ -187,8 +207,8 @@ export default async function ArtisanOnboardingPage() {
 
         {canSubmitForm ? (
           <ArtisanOnboardingForm
-            initialFullName={artisan?.full_name ?? ""}
-            initialTrade={artisan?.trade ?? "plumber"}
+            initialFullName={defaultName}
+            initialTrade={defaultTrade}
             initialBio={artisan?.bio ?? ""}
             initialWorkArea={artisan?.work_area ?? ""}
           />

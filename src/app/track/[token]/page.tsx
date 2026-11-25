@@ -23,10 +23,10 @@ export default async function TrackSharedJobPage({
 
   if (!isSupabaseAdminConfigured() || !token || token.length < 16) {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
         <Header />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 text-center shadow-sm">
             <h1 className="text-lg font-bold text-gray-900">Invalid tracking link</h1>
             <p className="mt-2 text-sm text-gray-600">
               This safety share link is invalid or has expired.
@@ -48,10 +48,10 @@ export default async function TrackSharedJobPage({
 
   if (!share || new Date(share.expires_at).getTime() < Date.now()) {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
         <Header />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 text-center shadow-sm">
             <h1 className="text-lg font-bold text-gray-900">Share link expired</h1>
             <p className="mt-2 text-sm text-gray-600">
               Safety tracking links expire automatically after 24 hours.
@@ -81,7 +81,7 @@ export default async function TrackSharedJobPage({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header />
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col justify-center px-4 py-8">
         <div className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm">

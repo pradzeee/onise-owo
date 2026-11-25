@@ -5,8 +5,10 @@ import { Lock, ShieldCheck, Sparkles } from "lucide-react";
 import { Header } from "@/components/Header";
 import { LoginForm } from "@/components/LoginForm";
 import { APP_NAME } from "@/lib/constants";
+import { isFirebaseServerConfigured } from "@/lib/firebase/server";
 import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "@/lib/supabase/server";
 
@@ -18,6 +20,8 @@ export const metadata: Metadata = {
 
 export default async function LoginPage() {
   const configured = isSupabaseServerConfigured();
+  const firebaseConfigured = isFirebaseServerConfigured();
+  const supabaseConfigured = isRealSupabaseConfigured();
 
   if (configured) {
     const supabase = await createSupabaseServerClient();
@@ -54,7 +58,10 @@ export default async function LoginPage() {
           </p>
         </div>
 
-        <LoginForm supabaseConfigured={configured} />
+        <LoginForm
+          firebaseConfigured={firebaseConfigured}
+          supabaseConfigured={supabaseConfigured}
+        />
 
         {/* Trust Badges Footer */}
         <div className="mt-6 flex flex-wrap items-center justify-center gap-4 text-[11px] font-medium text-gray-500">

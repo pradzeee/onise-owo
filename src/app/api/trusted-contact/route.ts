@@ -1,8 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import {
+  deleteFirestoreTrustedContact,
+  fetchFirestoreTrustedContact,
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+  saveFirestoreTrustedContact,
+} from "@/lib/firebase/server";
 import { maskPhoneForUi, normalizeNigerianPhone } from "@/lib/phone";
 import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "@/lib/supabase/server";
 
@@ -12,6 +20,27 @@ const contactSchema = z.object({
 });
 
 export async function GET() {
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (!fbSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    const contact = fbSession.idToken
+      ? await fetchFirestoreTrustedContact(fbSession.uid, fbSession.idToken)
+      : null;
+
+    return NextResponse.json({
+      contact: contact
+        ? {
+            contactName: contact.contactName,
+            contactPhone: contact.contactPhone,
+            maskedPhone: maskPhoneForUi(contact.contactPhone),
+            updatedAt: contact.updatedAt,
+          }
+        : null,
+    });
+  }
+
   if (!isSupabaseServerConfigured()) {
     return NextResponse.json({ contact: null });
   }
@@ -44,10 +73,6 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  if (!isSupabaseServerConfigured()) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
-  }
-
   const rawBody = await request.json().catch(() => null);
   const parsed = contactSchema.safeParse(rawBody);
   if (!parsed.success) {
@@ -67,6 +92,42 @@ export async function PUT(request: NextRequest) {
     );
   }
 
+  const nowUtc = new Date().toISOString();
+
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (!fbSession || !fbSession.idToken) {
+      return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+    }
+
+    const saved = await saveFirestoreTrustedContact(fbSession.uid, fbSession.idToken, {
+      contactName: parsed.data.contactName,
+      contactPhone: phoneE164,
+      updatedAt: nowUtc,
+    });
+
+    if (!saved) {
+      return NextResponse.json(
+        { error: "Could not save trusted contact." },
+        { status: 400 },
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      contact: {
+        contactName: parsed.data.contactName,
+        contactPhone: phoneE164,
+        maskedPhone: maskPhoneForUi(phoneE164),
+        updatedAt: nowUtc,
+      },
+    });
+  }
+
+  if (!isSupabaseServerConfigured()) {
+    return NextResponse.json({ error: "Backend not configured." }, { status: 503 });
+  }
+
   const supabase = await createSupabaseServerClient();
   const {
     data: { user },
@@ -76,7 +137,6 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const nowUtc = new Date().toISOString();
   const { error } = await supabase.from("trusted_contacts").upsert(
     {
       user_id: user.id,
@@ -106,6 +166,17 @@ export async function PUT(request: NextRequest) {
 }
 
 export async function DELETE() {
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (!fbSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (fbSession.idToken) {
+      await deleteFirestoreTrustedContact(fbSession.uid, fbSession.idToken);
+    }
+    return NextResponse.json({ ok: true });
+  }
+
   if (!isSupabaseServerConfigured()) {
     return NextResponse.json({ ok: true });
   }

@@ -55,7 +55,7 @@ export default async function AdminVerificationsPage() {
 
   if (!profile || profile.role !== "admin" || profile.account_status !== "active") {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
         <Header isAuthenticated roleLabel={profile?.role ?? null} />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
           <div className="rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm">
@@ -118,21 +118,21 @@ export default async function AdminVerificationsPage() {
   );
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header isAuthenticated roleLabel="admin" />
 
-      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:py-8">
-        <div>
+      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <div className="rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs sm:p-6">
           <Link
             href="/dashboard"
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 hover:text-gray-900"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
             Back to dashboard
           </Link>
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2">
             <ShieldCheck className="h-6 w-6 text-[#0B6E4F]" />
-            <h1 className="text-2xl font-extrabold tracking-tight text-gray-900">
+            <h1 className="text-xl font-black tracking-tight text-gray-900 sm:text-2xl">
               Artisan Verification Review
             </h1>
           </div>

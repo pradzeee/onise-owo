@@ -63,17 +63,17 @@ export default async function ArtisanPublicProfilePage({
 
   if (!artisan) {
     return (
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
         <Header isAuthenticated roleLabel={viewerProfile?.role ?? null} />
         <main className="mx-auto flex w-full max-w-md flex-1 flex-col justify-center px-4 py-8">
-          <div className="rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <div className="rounded-2xl border border-gray-200/80 bg-white p-6 text-center shadow-sm">
             <h1 className="text-lg font-bold text-gray-900">Artisan not found</h1>
             <p className="mt-2 text-sm text-gray-600">
               This artisan profile is unavailable or not yet verified.
             </p>
             <Link
               href="/find"
-              className="mt-4 inline-flex min-h-10 items-center rounded-lg bg-[#0B6E4F] px-4 py-2 text-xs font-semibold text-white"
+              className="mt-4 inline-flex min-h-10 items-center rounded-xl bg-[#0B6E4F] px-4 py-2 text-xs font-bold text-white"
             >
               Find nearby artisans
             </Link>
@@ -98,20 +98,22 @@ export default async function ArtisanPublicProfilePage({
     .toUpperCase();
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header isAuthenticated roleLabel={viewerProfile?.role ?? null} />
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-6 px-4 py-6 sm:py-8">
-        <Link
-          href="/find"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to nearby artisans
-        </Link>
+      <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <div>
+          <Link
+            href="/find"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-50 hover:text-gray-900"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to nearby artisans
+          </Link>
+        </div>
 
         {/* Artisan Profile Summary */}
-        <section className="space-y-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6">
+        <section className="space-y-4 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-sm sm:p-6">
           <div className="flex items-start gap-4">
             {photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element

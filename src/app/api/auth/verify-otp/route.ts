@@ -1,7 +1,5 @@
-import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { DEV_ROLE_COOKIE_NAME, isDevAccessAllowed } from "@/lib/dev-access";
 import { getClientIp } from "@/lib/http";
 import { logger } from "@/lib/logger";
 import { normalizeNigerianPhone } from "@/lib/phone";
@@ -72,19 +70,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In local dev without live Supabase, log in immediately as customer
-    if (isDevAccessAllowed() && !isRealSupabaseConfigured()) {
-      const cookieStore = await cookies();
-      if (!cookieStore.get(DEV_ROLE_COOKIE_NAME)?.value) {
-        cookieStore.set(DEV_ROLE_COOKIE_NAME, "customer", {
-          path: "/",
-          sameSite: "lax",
-        });
-      }
-      return NextResponse.json({
-        ok: true,
-        nextPath: "/dashboard",
-      });
+    // Block legacy non-Supabase OTP bypass so no unverified session cookies can be minted
+    if (!isRealSupabaseConfigured()) {
+      return NextResponse.json(
+        { error: "Phone OTP verification is disabled. Sign in with Google or Email & Password." },
+        { status: 410 },
+      );
     }
 
     if (!isSupabaseServerConfigured()) {

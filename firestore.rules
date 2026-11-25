@@ -1,0 +1,340 @@
+rules_version = '2';
+
+// =============================================================================
+// Assumed Data Model — Oníṣẹ́ ọwọ́ Marketplace
+// =============================================================================
+//
+// This security rules file assumes the following Firestore collections:
+//
+// Collection: users
+// Document ID: {userId} (must match Firebase Auth request.auth.uid)
+// Contains private PII (email, phone, legal acceptance, consents). Strictly
+// owner-only readable; client deletes are disabled (handled server-side).
+// Fields:
+//   - uid: string (required, immutable, must equal userId == request.auth.uid)
+//   - email: string (required, immutable, non-empty <= 254 chars; must match
+//       request.auth.token.email case-insensitively on create when present)
+//   - displayName: string (required, trimmed length 2..100, raw <= 120 on create,
+//       length 2..100 on update when changed)
+//   - role: string (required, immutable, strictly 'customer' or 'artisan';
+//       'admin' is NEVER client-creatable or client-assignable)
+//   - trade: string | null (required and in allowed trades list when
+//       role == 'artisan'; absent or null when role == 'customer')
+//   - phone: string | null (optional, length <= 25 or null)
+//   - accountStatus: string (required, 'active' on create; client updates may
+//       only transition between 'active' and 'paused' — never from or to
+//       'suspended' or 'deleted')
+//   - verificationStatus: string (required, immutable after create; must be
+//       'unverified' on create; valid values: 'unverified', 'pending',
+//       'approved', 'rejected', 'suspended')
+//   - accepted18Plus: bool (required, must be true)
+//   - acceptedTermsVersion: string (required, non-empty, <= 64 chars)
+//   - acceptedPrivacyVersion: string (required, non-empty, <= 64 chars)
+//   - consents: map | null (optional, bounded map of ConsentType entries)
+//   - createdAt: timestamp | ISO-8601 string (optional, immutable on update)
+//   - updatedAt: timestamp | ISO-8601 string (optional)
+//
+// Collection: trusted_contacts
+// Document ID: {userId} (must match Firebase Auth request.auth.uid)
+// Private emergency / Share Job / SOS trusted contact. Strictly owner-only.
+// Fields:
+//   - contactName: string (required, trimmed >= 2, length 2..120)
+//   - contactPhone: string (required, trimmed >= 10, length 10..25)
+//   - updatedAt: timestamp | ISO-8601 string (optional)
+//
+// Collection: public_artisans
+// Document ID: {userId}
+// Non-PII public discovery profile managed exclusively by trusted server/admin
+// workflows (NEVER writable by clients). Must NEVER contain PII (email, phone,
+// NIN, bank details, or private addresses).
+// Fields (server-managed):
+//   - verificationStatus: string ('approved' for public listing)
+//   - accountStatus: string ('active' for public listing)
+//   - displayName / fullName, trade, workArea, ratingAvg, ratingCount, isOnline
+//
+// All other collections and subcollections are denied by default.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // Helper Functions
+    // =========================================================================
+
+    // Check if the user is authenticated via Firebase Auth
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns the document path {userId}
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Verify UID hasn't been tampered with on create
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+             request.resource.data.uid == request.auth.uid;
+    }
+
+    // Ensure UID field is not modified on update
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+             ('uid' in resource.data && request.resource.data.uid == resource.data.uid);
+    }
+
+    // Validate required fields exist on a map/document
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    // Validate that a map/document contains only allowed fields
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    // Ensure immutable fields were neither added, removed, nor modified on update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Validate string type and raw length bounds
+    function validStringLength(value, minLen, maxLen) {
+      return value is string &&
+             value.size() >= minLen &&
+             value.size() <= maxLen;
+    }
+
+    // Validate string type, trimmed non-empty bounds, and raw upper bound
+    function validTrimmedStringLength(value, minTrimLen, maxTrimLen, maxRawLen) {
+      return value is string &&
+             value.trim().size() >= minTrimLen &&
+             value.trim().size() <= maxTrimLen &&
+             value.size() <= maxRawLen;
+    }
+
+    // Validate email format and reasonable max length
+    function isValidEmail(email) {
+      return validStringLength(email, 3, 254) &&
+             email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // Validate ISO 8601 UTC/offset date string format when string timestamps are used
+    function isValidDateString(dateStr) {
+      return validStringLength(dateStr, 19, 40) &&
+             dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // Accept native Firestore timestamps or bounded ISO 8601 date strings
+    function isValidTimestampValue(val) {
+      return val is timestamp || isValidDateString(val);
+    }
+
+    // Verify email matches the Firebase Auth token email (case-insensitive) when available
+    function isValidEmailMatch(email) {
+      return !('email' in request.auth.token) ||
+             request.auth.token.email == null ||
+             (request.auth.token.email is string &&
+              (request.auth.token.email == '' ||
+               email.lower() == request.auth.token.email.lower()));
+    }
+
+    // =========================================================================
+    // Domain Validators (Called in BOTH create and update rules)
+    // =========================================================================
+
+    // Validate an individual consent entry (boolean or bounded consent metadata map)
+    function isValidConsentValue(val) {
+      return val is bool ||
+             (val is map &&
+              hasOnlyAllowedFields(val, ['granted', 'version', 'consentedAt', 'withdrawnAt', 'updatedAt']) &&
+              hasRequiredFields(val, ['granted']) &&
+              val.granted is bool &&
+              (!('version' in val) || validTrimmedStringLength(val.version, 1, 64, 64)) &&
+              (!('consentedAt' in val) || isValidTimestampValue(val.consentedAt)) &&
+              (!('withdrawnAt' in val) || val.withdrawnAt == null || isValidTimestampValue(val.withdrawnAt)) &&
+              (!('updatedAt' in val) || isValidTimestampValue(val.updatedAt)));
+    }
+
+    // Validate optional consents map with strict key allowlist and bounded entry values
+    function isValidConsentsMap(consents) {
+      return consents is map &&
+             hasOnlyAllowedFields(consents, [
+               'age_18_plus',
+               'terms_of_service',
+               'privacy_policy',
+               'location',
+               'notifications',
+               'face_matching'
+             ]) &&
+             (!('age_18_plus' in consents) || isValidConsentValue(consents.age_18_plus)) &&
+             (!('terms_of_service' in consents) || isValidConsentValue(consents.terms_of_service)) &&
+             (!('privacy_policy' in consents) || isValidConsentValue(consents.privacy_policy)) &&
+             (!('location' in consents) || isValidConsentValue(consents.location)) &&
+             (!('notifications' in consents) || isValidConsentValue(consents.notifications)) &&
+             (!('face_matching' in consents) || isValidConsentValue(consents.face_matching));
+    }
+
+    // Enforce trade requirements based on role
+    function isValidTradeForRole(data) {
+      return (data.role == 'artisan' &&
+              'trade' in data &&
+              data.trade is string &&
+              data.trade in [
+                'plumber',
+                'electrician',
+                'tailor',
+                'carpenter',
+                'mechanic',
+                'painter',
+                'makeup_artist'
+              ]) ||
+             (data.role == 'customer' &&
+              (!('trade' in data) || data.trade == null));
+    }
+
+    // Validate complete users/{userId} schema, types, size bounds, and invariants
+    function isValidUser(data, userId) {
+      return hasOnlyAllowedFields(data, [
+               'uid',
+               'email',
+               'displayName',
+               'role',
+               'trade',
+               'phone',
+               'accountStatus',
+               'verificationStatus',
+               'accepted18Plus',
+               'acceptedTermsVersion',
+               'acceptedPrivacyVersion',
+               'consents',
+               'createdAt',
+               'updatedAt'
+             ]) &&
+             hasRequiredFields(data, [
+               'uid',
+               'email',
+               'displayName',
+               'role',
+               'accountStatus',
+               'verificationStatus',
+               'accepted18Plus',
+               'acceptedTermsVersion',
+               'acceptedPrivacyVersion'
+             ]) &&
+             data.uid is string &&
+             data.uid == userId &&
+             data.email is string &&
+             data.email.trim().size() > 0 &&
+             isValidEmail(data.email) &&
+             validTrimmedStringLength(data.displayName, 2, 100, 120) &&
+             data.role is string &&
+             data.role in ['customer', 'artisan'] &&
+             isValidTradeForRole(data) &&
+             (!('phone' in data) ||
+              data.phone == null ||
+              validStringLength(data.phone, 0, 25)) &&
+             data.accountStatus is string &&
+             data.accountStatus in ['active', 'paused'] &&
+             data.verificationStatus is string &&
+             data.verificationStatus in ['unverified', 'pending', 'approved', 'rejected', 'suspended'] &&
+             data.accepted18Plus is bool &&
+             data.accepted18Plus == true &&
+             validTrimmedStringLength(data.acceptedTermsVersion, 1, 64, 64) &&
+             validTrimmedStringLength(data.acceptedPrivacyVersion, 1, 64, 64) &&
+             (!('consents' in data) ||
+              data.consents == null ||
+              isValidConsentsMap(data.consents)) &&
+             (!('createdAt' in data) || isValidTimestampValue(data.createdAt)) &&
+             (!('updatedAt' in data) || isValidTimestampValue(data.updatedAt));
+    }
+
+    // Users may only toggle accountStatus between 'active' and 'paused';
+    // suspended or deleted accounts can never self-restore or transition.
+    function isValidAccountStatusTransition(prevStatus, nextStatus) {
+      return prevStatus in ['active', 'paused'] &&
+             nextStatus in ['active', 'paused'];
+    }
+
+    // Validate trusted_contacts/{userId} schema and field bounds
+    function isValidTrustedContact(data) {
+      return hasOnlyAllowedFields(data, ['contactName', 'contactPhone', 'updatedAt']) &&
+             hasRequiredFields(data, ['contactName', 'contactPhone']) &&
+             validTrimmedStringLength(data.contactName, 2, 120, 120) &&
+             validStringLength(data.contactName, 2, 120) &&
+             validTrimmedStringLength(data.contactPhone, 10, 25, 25) &&
+             validStringLength(data.contactPhone, 10, 25) &&
+             (!('updatedAt' in data) || isValidTimestampValue(data.updatedAt));
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+
+    // Private user profiles (owner-only read/create/update; no client delete)
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                    uidUnchanged() &&
+                    isValidUser(request.resource.data, userId) &&
+                    isValidEmailMatch(request.resource.data.email) &&
+                    request.resource.data.accountStatus == 'active' &&
+                    request.resource.data.verificationStatus == 'unverified';
+
+      allow update: if isOwner(userId) &&
+                    uidNotModified() &&
+                    isValidUser(request.resource.data, userId) &&
+                    areImmutableFieldsUnchanged([
+                      'uid',
+                      'email',
+                      'role',
+                      'verificationStatus',
+                      'createdAt'
+                    ]) &&
+                    'accountStatus' in resource.data &&
+                    isValidAccountStatusTransition(
+                      resource.data.accountStatus,
+                      request.resource.data.accountStatus
+                    ) &&
+                    (!('displayName' in resource.data) ||
+                     request.resource.data.displayName == resource.data.displayName ||
+                     validStringLength(request.resource.data.displayName, 2, 100));
+
+      // Account deletion is handled strictly via controlled server-side flow
+      allow delete: if false;
+    }
+
+    // Safety trusted contacts (strictly owner-only CRUD)
+    match /trusted_contacts/{userId} {
+      allow read: if isOwner(userId);
+
+      allow create: if isOwner(userId) &&
+                    isValidTrustedContact(request.resource.data);
+
+      allow update: if isOwner(userId) &&
+                    isValidTrustedContact(request.resource.data);
+
+      allow delete: if isOwner(userId);
+    }
+
+    // Public artisan directory profiles (server/admin managed; authenticated reads)
+    match /public_artisans/{userId} {
+      allow read: if isAuthenticated() &&
+                  (isOwner(userId) ||
+                   (resource.data.verificationStatus == 'approved' &&
+                    resource.data.accountStatus == 'active'));
+
+      allow write: if false;
+    }
+
+    // =========================================================================
+    // Default-Deny Catch-All
+    // =========================================================================
+    // Deny all reads and writes to any unlisted collection or subcollection.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

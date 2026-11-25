@@ -67,20 +67,20 @@ export default async function JobsListPage() {
   const pendingRequests = requests.filter((r) => r.status === "sent");
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header isAuthenticated roleLabel={profile.role} />
 
-      <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-4 py-6 sm:py-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <main className="mx-auto w-full max-w-4xl flex-1 space-y-6 px-4 py-6 sm:px-6 sm:py-8">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs sm:p-6">
           <div>
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-700 transition hover:bg-gray-200 hover:text-gray-900"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
               Back to dashboard
             </Link>
-            <h1 className="mt-2 flex items-center gap-2 text-2xl font-extrabold text-gray-900">
+            <h1 className="mt-3 flex items-center gap-2 text-xl font-black tracking-tight text-gray-900 sm:text-2xl">
               <Briefcase className="h-5 w-5 text-[#0B6E4F]" />
               Jobs &amp; Requests
             </h1>
@@ -89,7 +89,7 @@ export default async function JobsListPage() {
           {profile.role === "customer" ? (
             <Link
               href="/jobs/new"
-              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[#0B6E4F] px-4 py-2 text-xs font-bold text-white hover:bg-[#08523B]"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-[#0B6E4F] px-4 py-2 text-xs font-bold text-white shadow-xs transition hover:bg-[#08523B]"
             >
               <PlusCircle className="h-4 w-4" />
               New job request

@@ -1,9 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
-import { LEGAL_VERSIONS } from "@/lib/constants";
+import { LEGAL_VERSIONS, type ConsentRecord, type ConsentType } from "@/lib/constants";
+import {
+  fetchFirestoreUserProfile,
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+  saveFirestoreUserProfile,
+} from "@/lib/firebase/server";
 import { logger } from "@/lib/logger";
 import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "@/lib/supabase/server";
 
@@ -13,10 +20,61 @@ const updateConsentSchema = z.object({
   idempotencyKey: z.string().trim().min(8).max(128).optional(),
 });
 
+function buildFirestoreConsentRows(
+  userId: string,
+  consentsMap: Record<string, boolean | undefined>,
+  fallbackTs: string,
+): ConsentRecord[] {
+  const orderedTypes: ConsentType[] = [
+    "age_18_plus",
+    "terms_of_service",
+    "privacy_policy",
+    "location",
+    "notifications",
+    "face_matching",
+  ];
+
+  const rows: ConsentRecord[] = [];
+  for (const type of orderedTypes) {
+    const val = consentsMap[type];
+    if (typeof val !== "boolean") continue;
+    rows.push({
+      id: `fb-${userId}-${type}`,
+      user_id: userId,
+      consent_type: type,
+      version: LEGAL_VERSIONS[type],
+      granted: val,
+      consented_at: fallbackTs,
+      withdrawn_at: val ? null : fallbackTs,
+      created_at: fallbackTs,
+    });
+  }
+  return rows;
+}
+
 export async function GET() {
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (!fbSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (!fbSession.idToken) {
+      return NextResponse.json({ consents: [] });
+    }
+    const profile = await fetchFirestoreUserProfile(fbSession.uid, fbSession.idToken);
+    const consents = profile
+      ? buildFirestoreConsentRows(
+          fbSession.uid,
+          profile.consents ?? {},
+          profile.updatedAt || profile.createdAt,
+        )
+      : [];
+    return NextResponse.json({ consents });
+  }
+
   if (!isSupabaseServerConfigured()) {
     return NextResponse.json(
-      { error: "Supabase is not configured yet." },
+      { error: "Backend is not configured yet." },
       { status: 503 },
     );
   }
@@ -49,19 +107,60 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!isSupabaseServerConfigured()) {
-      return NextResponse.json(
-        { error: "Supabase is not configured yet." },
-        { status: 503 },
-      );
-    }
-
     const rawBody = await request.json().catch(() => null);
     const parsed = updateConsentSchema.safeParse(rawBody);
     if (!parsed.success) {
       return NextResponse.json(
         { error: parsed.error.issues[0]?.message ?? "Invalid consent request." },
         { status: 400 },
+      );
+    }
+
+    if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+      const fbSession = await getActiveFirebaseSession();
+      if (!fbSession) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      }
+
+      const nowIso = new Date().toISOString();
+      if (fbSession.idToken) {
+        const existing = await fetchFirestoreUserProfile(fbSession.uid, fbSession.idToken);
+        if (existing) {
+          const updatedConsents = {
+            ...(existing.consents ?? {}),
+            [parsed.data.consentType]: parsed.data.granted,
+          };
+          await saveFirestoreUserProfile(
+            fbSession.uid,
+            fbSession.idToken,
+            { consents: updatedConsents, updatedAt: nowIso },
+            ["consents", "updatedAt"],
+          );
+        }
+      }
+
+      logger.info("consents.updated", {
+        userId: fbSession.uid,
+        consentType: parsed.data.consentType,
+        granted: parsed.data.granted,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        consent: {
+          consent_type: parsed.data.consentType,
+          granted: parsed.data.granted,
+          version: LEGAL_VERSIONS[parsed.data.consentType],
+          consented_at: nowIso,
+          withdrawn_at: parsed.data.granted ? null : nowIso,
+        },
+      });
+    }
+
+    if (!isSupabaseServerConfigured()) {
+      return NextResponse.json(
+        { error: "Backend is not configured yet." },
+        { status: 503 },
       );
     }
 

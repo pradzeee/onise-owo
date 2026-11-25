@@ -42,17 +42,19 @@ export default async function JobDetailPage({
   const { jobId } = await params;
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header isAuthenticated roleLabel={profile?.role ?? null} />
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-4 py-6 sm:py-8">
-        <Link
-          href="/jobs"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to jobs
-        </Link>
+      <main className="mx-auto w-full max-w-3xl flex-1 space-y-5 px-4 py-6 sm:px-6 sm:py-8">
+        <div>
+          <Link
+            href="/jobs"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-xs transition hover:bg-gray-50 hover:text-gray-900"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to jobs
+          </Link>
+        </div>
 
         <JobDetailClient jobId={jobId} />
       </main>

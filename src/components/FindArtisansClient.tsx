@@ -25,8 +25,12 @@ const NearbyArtisansMap = dynamic(
   },
 );
 
-export function FindArtisansClient() {
-  const [trade, setTrade] = useState<ArtisanTrade>("plumber");
+export function FindArtisansClient({
+  initialTrade = "plumber",
+}: {
+  initialTrade?: ArtisanTrade;
+}) {
+  const [trade, setTrade] = useState<ArtisanTrade>(initialTrade);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [locationLabel, setLocationLabel] = useState<string>("");
   const [artisans, setArtisans] = useState<NearbyArtisanResult[]>([]);

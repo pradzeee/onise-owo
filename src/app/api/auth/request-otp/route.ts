@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { verifyCaptchaToken } from "@/lib/captcha";
-import { isDevAccessAllowed } from "@/lib/dev-access";
 import { getClientIp } from "@/lib/http";
 import { logger } from "@/lib/logger";
 import { maskPhoneForUi, normalizeNigerianPhone } from "@/lib/phone";
@@ -38,13 +37,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In local dev without live Supabase, accept immediately with mock code 123456
-    if (isDevAccessAllowed() && !isRealSupabaseConfigured()) {
-      return NextResponse.json({
-        ok: true,
-        maskedPhone: maskPhoneForUi(normalizedPhone),
-        cooldownSeconds: 30,
-      });
+    // Block legacy non-Supabase OTP bypass when Firebase or standardized auth is active
+    if (!isRealSupabaseConfigured()) {
+      return NextResponse.json(
+        { error: "Phone OTP login is disabled. Please sign in with Google or Email & Password." },
+        { status: 410 },
+      );
     }
 
     const clientIp = getClientIp(request);

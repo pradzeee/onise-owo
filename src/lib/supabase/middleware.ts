@@ -1,7 +1,22 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  FIREBASE_SESSION_COOKIE_NAME,
+  FIREBASE_TOKEN_COOKIE_NAME,
+  hasPlausibleFirebaseTokenCookie,
+  verifyFirebaseSessionCookie,
+} from "@/lib/firebase/session-cookie";
 
-const PROTECTED_PATHS = ["/onboarding", "/dashboard", "/artisan", "/artisans", "/admin", "/find", "/jobs", "/settings"];
+const PROTECTED_PATHS = [
+  "/onboarding",
+  "/dashboard",
+  "/artisan",
+  "/artisans",
+  "/admin",
+  "/find",
+  "/jobs",
+  "/settings",
+];
 
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,15 +28,43 @@ export async function updateSession(request: NextRequest) {
     (p) => pathname === p || pathname.startsWith(`${p}/`),
   );
 
-  // If live Supabase credentials are not configured, verify session via user email
   if (!hasRealSupabase || !url || !anonKey) {
+    if (!isProtected) {
+      return NextResponse.next({ request });
+    }
+
+    const hasFirebaseEnv = Boolean(
+      process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID &&
+        process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    );
+
+    if (hasFirebaseEnv) {
+      const fbSession = await verifyFirebaseSessionCookie(
+        request.cookies.get(FIREBASE_SESSION_COOKIE_NAME)?.value,
+      );
+      const fbTokenValid = hasPlausibleFirebaseTokenCookie(
+        request.cookies.get(FIREBASE_TOKEN_COOKIE_NAME)?.value,
+      );
+
+      if (!fbSession && !fbTokenValid) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/login";
+        redirectUrl.searchParams.set("next", pathname);
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      return NextResponse.next({ request });
+    }
+
+    // Legacy fallback only when neither Supabase nor Firebase is configured
     const userEmail = request.cookies.get("onise_user_email")?.value;
-    if (isProtected && !userEmail) {
+    if (!userEmail) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/login";
       redirectUrl.searchParams.set("next", pathname);
       return NextResponse.redirect(redirectUrl);
     }
+
     return NextResponse.next({ request });
   }
 

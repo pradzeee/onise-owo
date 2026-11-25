@@ -9,11 +9,11 @@ export const metadata: Metadata = {
 
 export default function PrivacyPage() {
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
       <Header />
 
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-        <article className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm sm:p-8">
+      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8 sm:px-6">
+        <article className="space-y-6 rounded-2xl border border-gray-200/80 bg-white p-6 shadow-sm sm:p-8">
           <div className="border-b border-gray-100 pb-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-[#0B6E4F]">
               NDPA 2023 Aligned • Version {LEGAL_VERSIONS.privacy_policy}

@@ -3,32 +3,87 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import {
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+} from "firebase/auth";
+import { AlertCircle, CheckCircle2, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import {
+  getFirebaseAuth,
+  getGoogleAuthProvider,
+  isFirebaseClientConfigured,
+  mapFirebaseAuthError,
+} from "@/lib/firebase/client";
 import {
   createSupabaseBrowserClient,
   isSupabaseConfigured,
 } from "@/lib/supabase/client";
-import { GoogleAuthModal } from "./GoogleAuthModal";
 
 interface LoginFormProps {
-  supabaseConfigured: boolean;
+  firebaseConfigured?: boolean;
+  supabaseConfigured?: boolean;
 }
 
-export function LoginForm({ supabaseConfigured }: LoginFormProps) {
+export function LoginForm({
+  firebaseConfigured = false,
+  supabaseConfigured = false,
+}: LoginFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
+  const [resetSending, setResetSending] = useState(false);
+  const [resetNotice, setResetNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleGoogleSignIn() {
-    if (googleLoading) return;
-    setError(null);
+  const canUseFirebase = firebaseConfigured && isFirebaseClientConfigured();
+  const canUseSupabase = supabaseConfigured && isSupabaseConfigured();
 
-    if (supabaseConfigured && isSupabaseConfigured()) {
+  async function establishFirebaseSession(idToken: string) {
+    const res = await fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idToken, mode: "login" }),
+    });
+
+    const data = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      nextPath?: string;
+    };
+
+    if (!res.ok || !data.ok) {
+      throw new Error(data.error ?? "Unable to establish session.");
+    }
+
+    router.push(data.nextPath ?? "/dashboard");
+    router.refresh();
+  }
+
+  async function handleGoogleSignIn() {
+    if (googleLoading || submitting) return;
+    setError(null);
+    setResetNotice(null);
+
+    if (canUseFirebase) {
+      setGoogleLoading(true);
+      try {
+        const auth = getFirebaseAuth();
+        const provider = getGoogleAuthProvider();
+        const credential = await signInWithPopup(auth, provider);
+        const idToken = await credential.user.getIdToken();
+        await establishFirebaseSession(idToken);
+      } catch (err) {
+        setError(mapFirebaseAuthError(err));
+        setGoogleLoading(false);
+      }
+      return;
+    }
+
+    if (canUseSupabase) {
       setGoogleLoading(true);
       try {
         const supabase = createSupabaseBrowserClient();
@@ -48,40 +103,33 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
         setError("Google sign-in was interrupted. Please try again.");
         setGoogleLoading(false);
       }
-    } else {
-      // Open clean Google account modal (Zero window.prompt!)
-      setIsGoogleModalOpen(true);
-    }
-  }
-
-  async function handleGoogleModalSelect(selectedEmail: string) {
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: selectedEmail, password: "google-oauth-session" }),
-    });
-
-    const data = (await res.json()) as { ok?: boolean; error?: string; nextPath?: string };
-    if (data.ok) {
-      setIsGoogleModalOpen(false);
-      router.push(data.nextPath ?? "/dashboard");
-      router.refresh();
       return;
     }
-    if (data.error) {
-      setError(data.error);
-      setIsGoogleModalOpen(false);
-    }
+
+    setError("Authentication service is not configured yet.");
   }
 
   async function handlePasswordLogin(e: React.FormEvent) {
     e.preventDefault();
-    if (submitting) return;
+    if (submitting || googleLoading) return;
 
     setError(null);
+    setResetNotice(null);
     setSubmitting(true);
 
     try {
+      if (canUseFirebase) {
+        const auth = getFirebaseAuth();
+        const credential = await signInWithEmailAndPassword(
+          auth,
+          email.trim().toLowerCase(),
+          password,
+        );
+        const idToken = await credential.user.getIdToken();
+        await establishFirebaseSession(idToken);
+        return;
+      }
+
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -101,10 +149,35 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
 
       router.push(data.nextPath ?? "/dashboard");
       router.refresh();
-    } catch {
-      setError("Network error. Please check your internet connection.");
+    } catch (err) {
+      setError(mapFirebaseAuthError(err));
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handlePasswordReset() {
+    if (!canUseFirebase || resetSending) return;
+    setError(null);
+    setResetNotice(null);
+
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      setError("Enter your email address above first so we can send a reset link.");
+      return;
+    }
+
+    setResetSending(true);
+    try {
+      const auth = getFirebaseAuth();
+      await sendPasswordResetEmail(auth, trimmedEmail);
+      setResetNotice(
+        `Password reset email sent to ${trimmedEmail}. Check your inbox or spam folder.`,
+      );
+    } catch (err) {
+      setError(mapFirebaseAuthError(err));
+    } finally {
+      setResetSending(false);
     }
   }
 
@@ -157,14 +230,19 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
           <div className="w-full border-t border-gray-200" />
         </div>
         <div className="relative flex justify-center text-xs uppercase tracking-wider">
-          <span className="bg-white px-3 font-medium text-gray-500">or sign in with password</span>
+          <span className="bg-white px-3 font-medium text-gray-500">
+            or sign in with email &amp; password
+          </span>
         </div>
       </div>
 
       {/* 4. Email & Password Form */}
       <form onSubmit={handlePasswordLogin} className="space-y-4">
         <div>
-          <label htmlFor="loginEmail" className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-700">
+          <label
+            htmlFor="loginEmail"
+            className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-700"
+          >
             Email Address
           </label>
           <div className="relative flex items-center">
@@ -187,9 +265,24 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
         </div>
 
         <div>
-          <label htmlFor="loginPassword" className="mb-1 block text-xs font-bold uppercase tracking-wider text-gray-700">
-            Password
-          </label>
+          <div className="mb-1 flex items-center justify-between">
+            <label
+              htmlFor="loginPassword"
+              className="block text-xs font-bold uppercase tracking-wider text-gray-700"
+            >
+              Password
+            </label>
+            {canUseFirebase ? (
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={resetSending}
+                className="text-xs font-semibold text-[#0B6E4F] hover:underline disabled:opacity-60"
+              >
+                {resetSending ? "Sending..." : "Forgot password?"}
+              </button>
+            ) : null}
+          </div>
           <div className="relative flex items-center">
             <Lock
               className="pointer-events-none absolute left-3.5 h-4 w-4 text-gray-400"
@@ -209,12 +302,23 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
+              aria-label={showPassword ? "Hide password" : "Show password"}
               className="absolute right-3 rounded p-1 text-gray-400 hover:text-gray-600 focus:outline-none"
             >
               {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
         </div>
+
+        {resetNotice ? (
+          <div
+            role="status"
+            className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-[#EBF7F2] p-3 text-xs text-[#08523B]"
+          >
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#0B6E4F]" />
+            <p className="font-medium">{resetNotice}</p>
+          </div>
+        ) : null}
 
         {error ? (
           <div
@@ -241,14 +345,6 @@ export function LoginForm({ supabaseConfigured }: LoginFormProps) {
           </Link>
         </p>
       </form>
-
-      {/* Google Sign-in Modal (Zero window.prompt!) */}
-      <GoogleAuthModal
-        isOpen={isGoogleModalOpen}
-        onClose={() => setIsGoogleModalOpen(false)}
-        onSelectAccount={handleGoogleModalSelect}
-        mode="login"
-      />
     </div>
   );
 }

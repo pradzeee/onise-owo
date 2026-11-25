@@ -9,11 +9,40 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { APP_NAME, TRADES } from "@/lib/constants";
+import {
+  createSupabaseServerClient,
+  isSupabaseServerConfigured,
+} from "@/lib/supabase/server";
 
-export default function HomePage() {
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  let isAuthenticated = false;
+  let roleLabel: string | null = null;
+
+  if (isSupabaseServerConfigured()) {
+    try {
+      const supabase = await createSupabaseServerClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        isAuthenticated = true;
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", user.id)
+          .maybeSingle();
+        roleLabel = profile?.role ?? null;
+      }
+    } catch {
+      // Render public view cleanly if backend not ready
+    }
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-[#F8FAF9]">
-      <Header />
+      <Header isAuthenticated={isAuthenticated} roleLabel={roleLabel} />
 
       <main className="mx-auto w-full max-w-4xl flex-1 px-4 py-8 sm:py-12">
         {/* 1. Hero Section */}
@@ -32,19 +61,39 @@ export default function HomePage() {
           </p>
 
           <div className="mt-8 flex flex-col gap-3.5 sm:flex-row">
-            <Link
-              href="/signup"
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 py-3.5 text-base font-bold text-gray-950 shadow-md transition hover:bg-amber-300 active:scale-98"
-            >
-              Get started — Register now
-              <ArrowRight className="h-4 w-4" aria-hidden="true" />
-            </Link>
-            <Link
-              href="/login"
-              className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3.5 text-base font-semibold text-white backdrop-blur-xs transition hover:bg-white/20"
-            >
-              Sign in to your account
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <Link
+                  href="/dashboard"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 py-3.5 text-base font-bold text-gray-950 shadow-md transition hover:bg-amber-300 active:scale-98"
+                >
+                  Open Dashboard
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <Link
+                  href={roleLabel === "artisan" ? "/jobs" : "/find"}
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3.5 text-base font-semibold text-white backdrop-blur-xs transition hover:bg-white/20"
+                >
+                  {roleLabel === "artisan" ? "View Incoming Jobs" : "Find Nearby Artisans"}
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/signup"
+                  className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-amber-400 px-6 py-3.5 text-base font-bold text-gray-950 shadow-md transition hover:bg-amber-300 active:scale-98"
+                >
+                  Get started — Register now
+                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                </Link>
+                <Link
+                  href="/login"
+                  className="inline-flex min-h-12 items-center justify-center rounded-xl border border-white/30 bg-white/10 px-6 py-3.5 text-base font-semibold text-white backdrop-blur-xs transition hover:bg-white/20"
+                >
+                  Sign in to your account
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Quick Metrics */}
@@ -76,17 +125,18 @@ export default function HomePage() {
               </h2>
             </div>
             <Link
-              href="/signup"
+              href={isAuthenticated ? "/find" : "/signup"}
               className="mt-2 text-xs font-bold text-[#0B6E4F] hover:underline sm:mt-0"
             >
-              View all trades &rarr;
+              {isAuthenticated ? "Search nearby trades →" : "Register as customer or artisan →"}
             </Link>
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
             {TRADES.map((trade) => (
-              <div
+              <Link
                 key={trade.id}
+                href={isAuthenticated ? `/find?trade=${trade.id}` : "/signup"}
                 className="group relative flex flex-col justify-between rounded-2xl border border-gray-200/80 bg-white p-5 shadow-xs transition hover:-translate-y-0.5 hover:border-[#0B6E4F]/50 hover:shadow-md"
               >
                 <div>
@@ -108,10 +158,10 @@ export default function HomePage() {
                 </div>
                 <div className="mt-4 border-t border-gray-100 pt-3">
                   <span className="inline-flex items-center gap-1 text-xs font-bold text-[#0B6E4F]">
-                    Request an artisan &rarr;
+                    {isAuthenticated ? `Find ${trade.label}s →` : "Request an artisan →"}
                   </span>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </section>
@@ -132,7 +182,7 @@ export default function HomePage() {
 
           <div className="mt-8 grid gap-6 sm:grid-cols-3">
             <div className="rounded-2xl border border-gray-100 bg-[#F8FAF9] p-5 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EBF7F2] text-[#0B6E4F] font-black">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EBF7F2] font-black text-[#0B6E4F]">
                 1
               </span>
               <h3 className="mt-4 text-sm font-bold text-gray-900">Search or Request</h3>
@@ -142,7 +192,7 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-[#F8FAF9] p-5 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EBF7F2] text-[#0B6E4F] font-black">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EBF7F2] font-black text-[#0B6E4F]">
                 2
               </span>
               <h3 className="mt-4 text-sm font-bold text-gray-900">Escrow Funded</h3>
@@ -152,7 +202,7 @@ export default function HomePage() {
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-[#F8FAF9] p-5 text-center">
-              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EBF7F2] text-[#0B6E4F] font-black">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#EBF7F2] font-black text-[#0B6E4F]">
                 3
               </span>
               <h3 className="mt-4 text-sm font-bold text-gray-900">OTP Release</h3>
@@ -200,12 +250,20 @@ export default function HomePage() {
             <Link href="/privacy" className="hover:text-gray-900">
               Privacy Policy
             </Link>
-            <Link href="/login" className="hover:text-gray-900">
-              Sign In
-            </Link>
-            <Link href="/signup" className="hover:text-gray-900 font-semibold text-[#0B6E4F]">
-              Register
-            </Link>
+            {isAuthenticated ? (
+              <Link href="/dashboard" className="font-semibold text-[#0B6E4F] hover:text-gray-900">
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link href="/login" className="hover:text-gray-900">
+                  Sign In
+                </Link>
+                <Link href="/signup" className="font-semibold text-[#0B6E4F] hover:text-gray-900">
+                  Register
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </footer>

@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { LEGAL_VERSIONS } from "@/lib/constants";
 import { isDevAccessAllowed } from "@/lib/dev-access";
+import { isFirebaseServerConfigured } from "@/lib/firebase/server";
 import { logger } from "@/lib/logger";
 import {
   createSupabaseServerClient,
@@ -51,22 +52,6 @@ export async function POST(request: NextRequest) {
       const supabase = await createSupabaseServerClient();
       const origin = request.nextUrl.origin;
 
-      // Duplicate email check: check if profile with this email already exists
-      const { data: existingProfile } = await supabase
-        .from("profiles")
-        .select("id, role")
-        .eq("email", email)
-        .maybeSingle();
-
-      if (existingProfile) {
-        return NextResponse.json(
-          {
-            error: `An account with this email already exists as a ${existingProfile.role}. Please log in instead.`,
-          },
-          { status: 409 },
-        );
-      }
-
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -82,7 +67,8 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         logger.warn("auth.signup_failed", { message: error.message });
-        const isDuplicate = error.message.toLowerCase().includes("already registered") ||
+        const isDuplicate =
+          error.message.toLowerCase().includes("already registered") ||
           error.message.toLowerCase().includes("user already exists");
         return NextResponse.json(
           {
@@ -112,14 +98,15 @@ export async function POST(request: NextRequest) {
         });
 
         if (role === "artisan" && trade) {
-          await supabase
-            .from("artisan_profiles")
-            .upsert({
-              user_id: data.user.id,
-              trade,
-              verification_status: "unverified",
-              is_online: false,
-            });
+          await supabase.from("artisan_profiles").upsert({
+            user_id: data.user.id,
+            full_name: displayName,
+            trade,
+            bio: "",
+            work_area: "",
+            verification_status: "unverified",
+            is_online: false,
+          });
         }
       }
 
@@ -130,17 +117,28 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Preview / Demo Mode (Strict Duplicate Email Protection)
+    // 2. Firebase is authoritative when configured (clients must authenticate via /api/auth/session)
+    if (isFirebaseServerConfigured()) {
+      return NextResponse.json(
+        { error: "Use Google Sign-In or Email/Password on the Sign Up form to register." },
+        { status: 400 },
+      );
+    }
+
+    // 3. Offline local fallback only when neither Supabase nor Firebase is configured
     if (isDevAccessAllowed()) {
       const cookieStore = await cookies();
       const rawUsers = cookieStore.get("onise_registered_users")?.value;
-      const registeredUsers: Record<string, {
-        email: string;
-        displayName: string;
-        role: "customer" | "artisan";
-        trade?: string;
-        createdAt: string;
-      }> = rawUsers ? JSON.parse(rawUsers) : {};
+      const registeredUsers: Record<
+        string,
+        {
+          email: string;
+          displayName: string;
+          role: "customer" | "artisan";
+          trade?: string;
+          createdAt: string;
+        }
+      > = rawUsers ? JSON.parse(rawUsers) : {};
 
       if (registeredUsers[email]) {
         const existing = registeredUsers[email];

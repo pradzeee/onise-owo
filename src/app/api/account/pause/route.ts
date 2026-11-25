@@ -1,7 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import {
+  fetchFirestoreUserProfile,
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+  saveFirestoreUserProfile,
+  setFirebaseSessionCookies,
+} from "@/lib/firebase/server";
+import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "@/lib/supabase/server";
 
@@ -10,14 +18,57 @@ const pauseSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  if (!isSupabaseServerConfigured()) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
-  }
-
   const rawBody = await request.json().catch(() => null);
   const parsed = pauseSchema.safeParse(rawBody);
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid pause request." }, { status: 400 });
+  }
+
+  // 1. Firebase Auth + Firestore Pause/Resume
+  if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    if (!fbSession) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (fbSession.role !== "artisan") {
+      return NextResponse.json(
+        { error: "Only artisan accounts can pause search visibility." },
+        { status: 403 },
+      );
+    }
+
+    const nextStatus = parsed.data.paused ? "paused" : "active";
+    if (fbSession.idToken) {
+      const existing = await fetchFirestoreUserProfile(fbSession.uid, fbSession.idToken);
+      if (existing) {
+        await saveFirestoreUserProfile(
+          fbSession.uid,
+          fbSession.idToken,
+          { accountStatus: nextStatus, updatedAt: new Date().toISOString() },
+          ["accountStatus", "updatedAt"],
+        );
+      }
+    }
+
+    await setFirebaseSessionCookies(
+      {
+        uid: fbSession.uid,
+        email: fbSession.email,
+        displayName: fbSession.displayName,
+        role: fbSession.role,
+        trade: fbSession.trade,
+        phone: fbSession.phone,
+        accountStatus: nextStatus,
+        verificationStatus: fbSession.verificationStatus,
+      },
+      fbSession.idToken,
+    );
+
+    return NextResponse.json({ ok: true, accountStatus: nextStatus });
+  }
+
+  if (!isSupabaseServerConfigured()) {
+    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
   }
 
   const supabase = await createSupabaseServerClient();

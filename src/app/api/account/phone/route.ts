@@ -1,6 +1,15 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
+import { LEGAL_VERSIONS } from "@/lib/constants";
+import {
+  fetchFirestoreUserProfile,
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+  normalizeDisplayName,
+  saveFirestoreUserProfile,
+  setFirebaseSessionCookies,
+} from "@/lib/firebase/server";
 import { logger } from "@/lib/logger";
 import { maskPhoneForUi, normalizeNigerianPhone } from "@/lib/phone";
 import {
@@ -34,8 +43,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const cookieStore = await cookies();
-
     // 1. Live Supabase update
     if (isRealSupabaseConfigured()) {
       const supabase = await createSupabaseServerClient();
@@ -47,12 +54,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
       }
 
-      // Update user phone in Supabase Auth metadata and profiles table
-      await supabase.auth.updateUser({
-        phone: normalizedPhone,
-      }).catch(() => {});
+      await supabase.auth
+        .updateUser({
+          phone: normalizedPhone,
+        })
+        .catch(() => {});
 
-      // Also persist in display metadata
       await supabase
         .from("profiles")
         .update({
@@ -60,16 +67,82 @@ export async function POST(request: NextRequest) {
         })
         .eq("id", user.id)
         .catch(() => {});
+
+      logger.info("account.phone_updated", { ok: true });
+      return NextResponse.json({
+        ok: true,
+        phone: normalizedPhone,
+        maskedPhone: maskPhoneForUi(normalizedPhone),
+      });
     }
 
-    // Save formatted phone in session cookie for instant display across pages
+    // 2. Firebase Auth + Firestore update
+    if (isFirebaseServerConfigured()) {
+      const fbSession = await getActiveFirebaseSession();
+      if (!fbSession) {
+        return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+      }
+
+      const nowIso = new Date().toISOString();
+      if (fbSession.idToken) {
+        const existing = await fetchFirestoreUserProfile(fbSession.uid, fbSession.idToken);
+        if (existing) {
+          await saveFirestoreUserProfile(
+            fbSession.uid,
+            fbSession.idToken,
+            { phone: normalizedPhone, updatedAt: nowIso },
+            ["phone", "updatedAt"],
+          );
+        } else if (fbSession.role === "customer" || fbSession.role === "artisan") {
+          await saveFirestoreUserProfile(fbSession.uid, fbSession.idToken, {
+            uid: fbSession.uid,
+            email: fbSession.email,
+            displayName: normalizeDisplayName(fbSession.displayName, fbSession.email),
+            role: fbSession.role,
+            trade: fbSession.role === "artisan" ? (fbSession.trade ?? "plumber") : null,
+            phone: normalizedPhone,
+            accountStatus: fbSession.accountStatus === "paused" ? "paused" : "active",
+            verificationStatus: fbSession.verificationStatus,
+            accepted18Plus: true,
+            acceptedTermsVersion: LEGAL_VERSIONS.terms_of_service,
+            acceptedPrivacyVersion: LEGAL_VERSIONS.privacy_policy,
+            consents: { age_18_plus: true, terms_of_service: true, privacy_policy: true },
+            createdAt: nowIso,
+            updatedAt: nowIso,
+          });
+        }
+      }
+
+      await setFirebaseSessionCookies(
+        {
+          uid: fbSession.uid,
+          email: fbSession.email,
+          displayName: fbSession.displayName,
+          role: fbSession.role,
+          trade: fbSession.trade,
+          phone: normalizedPhone,
+          accountStatus: fbSession.accountStatus,
+          verificationStatus: fbSession.verificationStatus,
+        },
+        fbSession.idToken,
+      );
+
+      logger.info("account.phone_updated", { ok: true });
+      return NextResponse.json({
+        ok: true,
+        phone: normalizedPhone,
+        maskedPhone: maskPhoneForUi(normalizedPhone),
+      });
+    }
+
+    // 3. Offline fallback
+    const cookieStore = await cookies();
     cookieStore.set("onise_user_phone", normalizedPhone, {
       path: "/",
       sameSite: "lax",
     });
 
     logger.info("account.phone_updated", { ok: true });
-
     return NextResponse.json({
       ok: true,
       phone: normalizedPhone,

@@ -530,12 +530,28 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
         phone: devUser.phone,
         role: "authenticated",
         app_metadata: {},
-        user_metadata: { role: devUser.role, trade: (devUser as any)?.trade },
+        user_metadata: {
+          role: devUser.role,
+          trade: (devUser as any)?.trade,
+          display_name: devUser.display_name,
+        },
         created_at: "2026-11-01T00:00:00Z",
       }
     : null;
 
   return {
+    storage: {
+      from(_bucket: string) {
+        return {
+          async upload(path: string) {
+            return { data: { path }, error: null };
+          },
+          async createSignedUrl(path: string) {
+            return { data: { signedUrl: `/api/mock-signed/${encodeURIComponent(path)}` }, error: null };
+          },
+        };
+      },
+    },
     auth: {
       async getUser() {
         return { data: { user: currentUser }, error: null };
@@ -591,6 +607,22 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
       if (fn === "expire_stale_online_artisans") {
         return Promise.resolve({ data: 0, error: null });
       }
+      if (fn === "set_optional_consent") {
+        return Promise.resolve({
+          data: {
+            id: `consent-${String(args.p_consent_type ?? "optional")}`,
+            consent_type: String(args.p_consent_type ?? "location"),
+            granted: Boolean(args.p_granted),
+          },
+          error: null,
+        });
+      }
+      if (fn === "set_artisan_account_pause") {
+        return Promise.resolve({
+          data: args.p_paused ? "paused" : "active",
+          error: null,
+        });
+      }
       if (fn === "complete_onboarding") {
         const role = String(args.p_role ?? "customer");
         if (currentUser) {
@@ -600,9 +632,9 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
           data: {
             id: currentUser?.id,
             role,
-            display_name: currentUser?.email?.split("@")[0] || "User",
+            display_name: devUser?.display_name || currentUser?.email?.split("@")[0] || "User",
             account_status: "active",
-            verification_status: "approved",
+            verification_status: "unverified",
           },
           error: null,
         });
@@ -619,12 +651,17 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
             data.push({
               id: currentUser.id,
               role: (currentUser.user_metadata as any)?.role || devUser?.role || null,
-              display_name: currentUser.email?.split("@")[0] || "User",
+              display_name:
+                devUser?.display_name ||
+                (currentUser.user_metadata as any)?.display_name ||
+                currentUser.email?.split("@")[0] ||
+                "User",
               phone: currentUser.phone || null,
-              account_status: "active",
-              verification_status: "approved",
-              rating_avg: 5.0,
-              rating_count: 0,
+              account_status: (devUser as any)?.rawAccountStatus ?? devUser?.account_status ?? "active",
+              verification_status:
+                (devUser as any)?.rawVerificationStatus ?? devUser?.verification_status ?? "unverified",
+              rating_avg: devUser?.rating_avg ?? 0,
+              rating_count: devUser?.rating_count ?? 0,
               created_at: new Date().toISOString(),
               updated_at: new Date().toISOString(),
             });
@@ -633,9 +670,14 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
         }
         case "artisan_profiles": {
           data = [...MOCK_ARTISAN_PROFILES];
-          if (currentUser && !data.some((a) => a.user_id === currentUser.id)) {
+          if (
+            currentUser &&
+            !data.some((a) => a.user_id === currentUser.id) &&
+            ((devUser as any)?.rawVerificationStatus ?? devUser?.verification_status) === "approved"
+          ) {
             data.push({
               user_id: currentUser.id,
+              full_name: devUser?.display_name ?? "Artisan",
               trade: (currentUser.user_metadata as any)?.trade || (devUser as any)?.trade || "plumber",
               is_online: false,
               last_seen_at: null,
@@ -689,6 +731,18 @@ export function createMockSupabaseServerClient(devUser: DevUser | null) {
 
       const chain = {
         select(_cols = "*") {
+          return chain;
+        },
+        insert(_rows: any) {
+          return chain;
+        },
+        upsert(_rows: any, _opts?: any) {
+          return chain;
+        },
+        update(_values: any) {
+          return chain;
+        },
+        delete() {
           return chain;
         },
         eq(col: string, val: any) {

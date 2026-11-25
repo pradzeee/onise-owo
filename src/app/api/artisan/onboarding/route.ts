@@ -2,6 +2,14 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { LEGAL_VERSIONS, TRADES, type ArtisanTrade } from "@/lib/constants";
 import { generateGuarantorToken } from "@/lib/guarantor";
+import {
+  fetchFirestoreUserProfile,
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+  normalizeDisplayName,
+  saveFirestoreUserProfile,
+  setFirebaseSessionCookies,
+} from "@/lib/firebase/server";
 import { logger } from "@/lib/logger";
 import {
   hashNinForIdentity,
@@ -19,6 +27,7 @@ import {
 } from "@/lib/supabase/admin";
 import {
   createSupabaseServerClient,
+  isRealSupabaseConfigured,
   isSupabaseServerConfigured,
 } from "@/lib/supabase/server";
 
@@ -525,6 +534,43 @@ export async function POST(request: NextRequest) {
       providerStatus: providerResult.providerStatus,
       smsProvider: smsResult.provider,
     });
+
+    // Persist verification status & trade cleanly in Firebase Firestore + session cookie when active
+    if (!isRealSupabaseConfigured() && isFirebaseServerConfigured()) {
+      const fbSession = await getActiveFirebaseSession();
+      if (fbSession) {
+        const safeName = normalizeDisplayName(parsed.data.fullName, fbSession.email);
+        const nextVerificationStatus = "pending";
+        if (fbSession.idToken) {
+          const existingDoc = await fetchFirestoreUserProfile(fbSession.uid, fbSession.idToken);
+          if (existingDoc) {
+            await saveFirestoreUserProfile(
+              fbSession.uid,
+              fbSession.idToken,
+              {
+                displayName: safeName,
+                verificationStatus: nextVerificationStatus,
+                updatedAt: nowUtc,
+              },
+              ["displayName", "verificationStatus", "updatedAt"],
+            );
+          }
+        }
+        await setFirebaseSessionCookies(
+          {
+            uid: fbSession.uid,
+            email: fbSession.email,
+            displayName: safeName,
+            role: fbSession.role,
+            trade: parsed.data.trade,
+            phone: fbSession.phone,
+            accountStatus: fbSession.accountStatus,
+            verificationStatus: nextVerificationStatus,
+          },
+          fbSession.idToken,
+        );
+      }
+    }
 
     const isDevMockSms =
       process.env.NODE_ENV !== "production" && smsResult.provider === "dev_mock";

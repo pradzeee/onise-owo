@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { isDevAccessAllowed } from "@/lib/dev-access";
+import { isFirebaseServerConfigured } from "@/lib/firebase/server";
 import { logger } from "@/lib/logger";
 import {
   createSupabaseServerClient,
@@ -57,16 +58,27 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 2. Preview / Demo Mode (Tester sign-in with verified registry)
+    // 2. Firebase is authoritative when configured (clients must authenticate via /api/auth/session)
+    if (isFirebaseServerConfigured()) {
+      return NextResponse.json(
+        { error: "Please log in with Google or Email & Password using Firebase Auth." },
+        { status: 400 },
+      );
+    }
+
+    // 3. Offline local fallback only when neither Supabase nor Firebase is configured
     if (isDevAccessAllowed()) {
       const cookieStore = await cookies();
       const rawUsers = cookieStore.get("onise_registered_users")?.value;
-      const registeredUsers: Record<string, {
-        email: string;
-        displayName: string;
-        role: "customer" | "artisan";
-        trade?: string;
-      }> = rawUsers ? JSON.parse(rawUsers) : {};
+      const registeredUsers: Record<
+        string,
+        {
+          email: string;
+          displayName: string;
+          role: "customer" | "artisan";
+          trade?: string;
+        }
+      > = rawUsers ? JSON.parse(rawUsers) : {};
 
       const account = registeredUsers[email];
       if (!account) {

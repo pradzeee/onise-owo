@@ -1,0 +1,21 @@
+{
+  "auth": {
+    "providers": {
+      "anonymous": false,
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Onise Owo",
+        "supportEmail": "oyewoleabdulazeez@gmail.com",
+        "authorizedRedirectUris": [
+          "https://onise-owo-ng-2026.firebaseapp.com/__/auth/handler",
+          "http://localhost:3000/__/auth/handler",
+          "https://onise-owo.vercel.app/__/auth/handler"
+        ]
+      }
+    }
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  }
+}

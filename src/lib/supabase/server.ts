@@ -2,9 +2,15 @@
 import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import {
+  getActiveFirebaseSession,
+  isFirebaseServerConfigured,
+} from "@/lib/firebase/server";
+import {
   createMockSupabaseServerClient,
   getActiveDevUser,
   isDevAccessAllowed,
+  type DevRole,
+  type DevUser,
 } from "../dev-access";
 
 export function isRealSupabaseConfigured(): boolean {
@@ -16,17 +22,42 @@ export function isRealSupabaseConfigured(): boolean {
 }
 
 export function isSupabaseServerConfigured(): boolean {
-  // In development, dev access mode provides full mock backend functionality
-  if (isDevAccessAllowed()) {
+  if (isRealSupabaseConfigured() || isFirebaseServerConfigured()) {
     return true;
   }
-  return isRealSupabaseConfigured();
+  return isDevAccessAllowed();
 }
 
 export async function createSupabaseServerClient(): Promise<any> {
   const isReal = isRealSupabaseConfigured();
 
-  // If in development mode and real Supabase is not configured, return the dev mock client.
+  if (!isReal && isFirebaseServerConfigured()) {
+    const fbSession = await getActiveFirebaseSession();
+    const mappedUser: (DevUser & { trade?: string }) | null = fbSession
+      ? {
+          id: fbSession.uid,
+          email: fbSession.email,
+          phone: fbSession.phone ?? "",
+          role: (fbSession.role ?? null) as DevRole,
+          display_name: fbSession.displayName,
+          account_status: (fbSession.accountStatus === "paused" ? "active" : fbSession.accountStatus) as "active",
+          verification_status:
+            fbSession.verificationStatus === "approved" ? "approved" : "unverified",
+          rating_avg: 0,
+          rating_count: 0,
+          trade: fbSession.trade ?? undefined,
+          rawAccountStatus: fbSession.accountStatus,
+          rawVerificationStatus: fbSession.verificationStatus,
+        } as DevUser & {
+          trade?: string;
+          rawAccountStatus?: string;
+          rawVerificationStatus?: string;
+        }
+      : null;
+
+    return createMockSupabaseServerClient(mappedUser);
+  }
+
   if (isDevAccessAllowed() && !isReal) {
     const devUser = await getActiveDevUser();
     return createMockSupabaseServerClient(devUser);

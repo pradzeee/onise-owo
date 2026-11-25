@@ -3,8 +3,8 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Hammer, Search, CheckCircle2 } from "lucide-react";
-import type { SelectableRole } from "@/lib/constants";
+import { Briefcase, CheckCircle2, Hammer, Search } from "lucide-react";
+import { TRADES, type SelectableRole } from "@/lib/constants";
 
 function createIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -16,10 +16,10 @@ function createIdempotencyKey(): string {
 export function OnboardingForm() {
   const router = useRouter();
   const [role, setRole] = useState<SelectableRole | null>(null);
+  const [trade, setTrade] = useState<string>("plumber");
   const [accepted, setAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Stable key per user session attempt so double-taps on slow networks are idempotent
   const idempotencyKeyRef = useRef<string>(createIdempotencyKey());
 
   async function handleSubmit(e: React.FormEvent) {
@@ -49,6 +49,7 @@ export function OnboardingForm() {
         },
         body: JSON.stringify({
           role,
+          trade: role === "artisan" ? trade : undefined,
           acceptedAgeAndLegal: true,
           idempotencyKey: idempotencyKeyRef.current,
         }),
@@ -77,10 +78,10 @@ export function OnboardingForm() {
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-5 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm sm:p-6"
+      className="space-y-5 rounded-2xl border border-gray-200/80 bg-white p-5 shadow-lg shadow-gray-200/40 sm:p-7"
     >
       <div>
-        <h2 className="text-base font-semibold text-gray-900">
+        <h2 className="text-base font-bold text-gray-900">
           Choose your account type
         </h2>
         <p className="mt-1 text-xs text-gray-600">
@@ -94,7 +95,7 @@ export function OnboardingForm() {
             aria-pressed={role === "customer"}
             className={`relative flex flex-col items-start rounded-xl border-2 p-4 text-left transition ${
               role === "customer"
-                ? "border-[#0B6E4F] bg-[#EBF7F2]/60"
+                ? "border-[#0B6E4F] bg-[#EBF7F2]/60 ring-2 ring-[#0B6E4F]/15"
                 : "border-gray-200 bg-white hover:border-gray-300"
             }`}
           >
@@ -118,7 +119,7 @@ export function OnboardingForm() {
             aria-pressed={role === "artisan"}
             className={`relative flex flex-col items-start rounded-xl border-2 p-4 text-left transition ${
               role === "artisan"
-                ? "border-[#0B6E4F] bg-[#EBF7F2]/60"
+                ? "border-[#0B6E4F] bg-[#EBF7F2]/60 ring-2 ring-[#0B6E4F]/15"
                 : "border-gray-200 bg-white hover:border-gray-300"
             }`}
           >
@@ -138,6 +139,36 @@ export function OnboardingForm() {
           </button>
         </div>
       </div>
+
+      {role === "artisan" && (
+        <div className="rounded-xl border border-emerald-200 bg-[#EBF7F2]/60 p-4">
+          <label
+            htmlFor="onboardingTrade"
+            className="mb-1.5 block text-xs font-bold text-[#08523B]"
+          >
+            Select your primary trade
+          </label>
+          <div className="relative">
+            <Briefcase
+              className="pointer-events-none absolute left-3.5 top-3.5 h-4 w-4 text-[#0B6E4F]"
+              aria-hidden="true"
+            />
+            <select
+              id="onboardingTrade"
+              name="trade"
+              value={trade}
+              onChange={(e) => setTrade(e.target.value)}
+              className="min-h-11 w-full rounded-xl border border-gray-300 bg-white pl-10 pr-4 text-sm font-semibold text-gray-900 focus:border-[#0B6E4F] focus:outline-none focus:ring-2 focus:ring-[#0B6E4F]/20"
+            >
+              {TRADES.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.label} ({t.description})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
         <label className="flex cursor-pointer items-start gap-3">
@@ -182,7 +213,7 @@ export function OnboardingForm() {
       <button
         type="submit"
         disabled={submitting || !role || !accepted}
-        className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#0B6E4F] px-4 py-3 text-base font-semibold text-white transition hover:bg-[#08523B] disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-12 w-full items-center justify-center rounded-xl bg-[#0B6E4F] px-4 py-3 text-base font-bold text-white shadow-sm transition hover:bg-[#08523B] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {submitting ? "Saving..." : "Continue to Oníṣẹ́ ọwọ́"}
       </button>

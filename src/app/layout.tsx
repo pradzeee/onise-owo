@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
-import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
+import { FirebaseTokenSync } from "@/components/FirebaseTokenSync";
 import { PwaRegistrar } from "@/components/PwaRegistrar";
+import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,8 +32,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en-NG">
-      <body className="min-h-dvh bg-[#FAFAF8] text-gray-900 antialiased">
+      <body className="min-h-dvh bg-[#F8FAF9] text-gray-900 antialiased">
         <PwaRegistrar />
+        <FirebaseTokenSync />
         {children}
       </body>
     </html>
